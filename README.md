@@ -1,68 +1,85 @@
-# Robot arm simulator
+# Robot arm and hand simulation (MuJoCo)
 
-Simulation of a robot arm in MuJoCo, to be driven later by a human input device. Aslo i just want to metio that we need also work on jostics (i mean animation where you can yse ur jostion for VR and then there would nice animation how robot make the same movemts)
+Lab research in Prof. Raffaele De Amicis's lab at Oregon State University. **Work in progress.**
 
+## Goal
 
+A MuJoCo simulation of a robot arm and hand that a person can drive in real time, as the base for:
 
-(a "bracelet", exact device not yet known maybe ). Course project for
-Prof. Raffaele De Amicis, Oregon State.
+- VR teleoperation: move a controller (Meta Quest) and the simulated arm copies the motion
+- reinforcement learning and imitation learning on the same model
 
-This repository started as a drone simulator. That work stopped in October 2026
-and lives in `archive/drone/` for reference. Nothing in there is used.
+The input side is kept behind a small adapter, so the device (keyboard first, then a VR controller or another wearable) can change without touching the simulation. `TECHNOLOGY_RESEARCH.md` explains that design and why MuJoCo was chosen over Isaac Lab.
+
+## Current state
+
+What exists and runs today:
+
+- **Hand model.** The Shadow Hand E3M5 (right and left) from [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie/tree/main/shadow_hand) is in `assets/shadow_hand/`. Each hand has 24 joints and 20 position actuators; the scene files add a free-floating object to manipulate. Both scenes load in MuJoCo 3.11.0.
+- **`pendulum.py`.** A first control example: a single hinge joint driven by a position actuator whose target flips between +1 and -1 rad every two seconds, shown in the interactive viewer.
+
+Not built yet: arm control, inverse kinematics, device input, VR, learning. The plan for these is in `LESSONS.md`, a sequence of lessons from loading a model to reaching a target point with inverse kinematics and driving it from an input device. Every lesson ends in a script that asserts a measured number rather than relying on what the viewer shows.
+
+The repository started as a drone simulator (a Skydio X2 quadrotor model). That work stopped in October 2026 and is kept in `archive/drone/` for reference; nothing outside the archive uses it.
+
+## Structure
+
+```
+assets/shadow_hand/      Shadow Hand MJCF model, meshes, scenes, keyframes (Apache 2.0)
+pendulum.py              position-actuator example in the viewer
+requirements.txt         pinned Python dependencies (mujoco==3.11.0)
+setup.sh / setup.ps1     create .venv with Python 3.12 and install requirements
+LESSONS.md               plan to the first milestone: the arm reaches a target under my control
+LOG.md                   work log
+TECHNOLOGY_RESEARCH.md   simulator choice and the device-adapter architecture
+archive/drone/           earlier drone simulation work, not used
+CLAUDE.md, .claude/      instructions for the AI assistant, which reviews and explains rather than writes the code
+```
 
 ## Setup
 
-Both scripts create `.venv` with Python 3.12 and install `requirements.txt`
-(`mujoco==3.11.0` is the main dependency). Run once per machine after
-`git clone`. VS Code finds `.venv` on its own on both systems.
+Python 3.12 is required. The setup scripts create `.venv` and install `requirements.txt`.
 
-**Windows (desktop):**
-
-```powershell
-.\setup.ps1
-.\.venv\Scripts\python.exe some_script.py
-```
-
-**macOS (laptop):** needs Python 3.12 first, e.g. `brew install python@3.12`.
+macOS or Linux (`brew install python@3.12` on macOS if needed):
 
 ```bash
 ./setup.sh
-.venv/bin/python some_script.py      # headless scripts
-.venv/bin/mjpython some_viewer.py    # anything that opens the MuJoCo viewer
 ```
 
-On macOS the viewer must run under `mjpython`, not `python`. The OS requires the
-GUI loop to own the main thread; plain `python` raises a RuntimeError from
-`launch_passive`.
+Windows:
 
-## Running
+```powershell
+.\setup.ps1
+```
 
+## Run
 
+Open the Shadow Hand scene in the MuJoCo viewer:
 
-so here what do you need to run it 
-
-cd ~/drone-sim
-
+```bash
 .venv/bin/python -m mujoco.viewer --mjcf="$PWD/assets/shadow_hand/scene_right.xml"
+```
 
+Run the pendulum example:
 
-Nothing runs yet. The arm model is chosen in lesson 1 (see `LESSONS.md`) and
-scripts appear as the lessons are completed.
+```bash
+.venv/bin/python pendulum.py       # Linux
+.venv/bin/mjpython pendulum.py     # macOS
+.\.venv\Scripts\python.exe pendulum.py   # Windows
+```
 
-## Documents
+On macOS, any script that opens the viewer with `launch_passive` must run under `mjpython`: the OS requires the GUI loop to own the main thread, and plain `python` raises a `RuntimeError`.
 
-| File | What it is |
-|---|---|
-| `LESSONS.md` | The curriculum: one concept per lesson, task, numeric check |
-| `LOG.md` | Learning log: what was done, what was learned, what is unclear |
-| `CLAUDE.md` | Rules for Claude Code here: teach, do not just give answers |
-| `TECHNOLOGY_RESEARCH.md` | Why MuJoCo over Isaac Lab, and the device-adapter architecture |
-| `.claude/skills/robot-arm/` | Project context for Claude: invariants, decisions, stop-and-ask points |
-| `archive/drone/` | The previous drone project, kept for history |
+## Next steps
 
-## Working rules
+From `LESSONS.md`:
 
-- Pull at the start of a session, push at the end. Every lesson ends in a pushed commit.
-- Never judge correctness by looking at the viewer. Every script asserts a number
-  computed independently.
-- Never commit `.venv/`.
+1. Inspect the loaded model: joint names and ranges, actuators and the joints they drive, total mass.
+2. Hold a pose with position actuators, then move through joint-space waypoints.
+3. Forward kinematics, then damped least-squares inverse kinematics to reach a target point.
+4. Keyboard control through the device adapter, with workspace and speed limits.
+5. VR controller teleoperation on that adapter.
+
+## Credits
+
+The Shadow Hand model was provided by [Shadow Robot Company](https://www.shadowrobot.com/) under the Apache 2.0 License and packaged as MJCF in MuJoCo Menagerie. See `assets/shadow_hand/README.md` and `assets/shadow_hand/LICENSE`.
