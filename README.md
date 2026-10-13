@@ -60,6 +60,15 @@ Open the Shadow Hand scene in the MuJoCo viewer:
 .venv/bin/python -m mujoco.viewer --mjcf="$PWD/assets/shadow_hand/scene_right.xml"
 ```
 
+On Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe -m mujoco.viewer --mjcf="$PWD\assets\shadow_hand\scene_right.xml"
+```
+
+
+
+
 Run the pendulum example:
 
 ```bash
