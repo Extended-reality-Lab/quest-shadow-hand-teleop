@@ -18,9 +18,10 @@ XML = """
 """
 
 model = mujoco.MjModel.from_xml_string(XML)
-data = mujoco.MjData(model)
+data = mujoco.MjData(model) # so here we have data about current state of the simulation. 
 
-with mujoco.viewer.launch_passive(model, data) as viewer:
+
+with mujoco.viewer.launch_passive(model, data) as viewer:  # open the window and start the simulation
     while viewer.is_running():
         #  so here every 2 seconds the target angle flips between +1 and -1 rad
         data.ctrl[0] = 1.0 if int(data.time) % 4 < 2 else -1.0
