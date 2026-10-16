@@ -6,6 +6,7 @@ Run from the repo root:
 import unittest
 
 import protocol
+import receiver
 
 # 26 identical joints: position (0.0123, 1.0456, -0.321) m, identity rotation.
 JOINTS_26 = [[0.0123, 1.0456, -0.321, 0.0, 0.0, 0.0, 1.0]] * 26
@@ -65,6 +66,50 @@ class ParseTest(unittest.TestCase):
                                     [[0.123456, 1.0, -0.5, 0.0, 0.0, 0.0, 1.0]] * 26)
         parsed = protocol.parse(protocol.encode(msg))
         self.assertEqual(parsed["joints"][0][0], 0.1235)
+
+
+class FakeClock:
+    """Clock the test moves by hand, so no test has to sleep."""
+
+    def __init__(self):
+        self.now = 100.0
+
+    def __call__(self):
+        return self.now
+
+
+class HandStateTest(unittest.TestCase):
+    def setUp(self):
+        self.clock = FakeClock()
+        self.hand = receiver.HandState(timeout=0.5, clock=self.clock)
+
+    def test_no_packet_yet_is_lost_no_packets(self):
+        self.assertEqual(self.hand.status(), "LOST (no packets)")
+
+    def test_tracked_then_timeout_switches_to_lost_no_packets(self):
+        self.hand.update(protocol.parse(VALID_TRACKED))
+        self.clock.now = 100.4
+        self.assertEqual(self.hand.status(), "TRACKED")
+        self.clock.now = 100.6
+        self.assertEqual(self.hand.status(), "LOST (no packets)")
+
+    def test_untracked_datagram_is_lost_tracking(self):
+        self.hand.update(protocol.parse(VALID_LOST))
+        self.assertEqual(self.hand.status(), "LOST (tracking)")
+
+    def test_rate_counts_last_second_only(self):
+        for t in (100.0, 100.5, 101.0, 101.2):
+            self.clock.now = t
+            self.hand.update(protocol.parse(VALID_TRACKED))
+        self.assertEqual(self.hand.rate_hz(), 3)
+
+
+class SeqCounterTest(unittest.TestCase):
+    def test_gap_is_counted_and_restart_is_not(self):
+        counter = receiver.SeqCounter()
+        for seq in (1, 2, 5, 6, 0, 1):
+            counter.update(seq)
+        self.assertEqual(counter.lost, 2)
 
 
 if __name__ == "__main__":
