@@ -88,3 +88,14 @@ Longer working documents live alongside this file:
 - `RISKS.md` — things that would be expensive to discover late
 - `REPRO.md` — how performance numbers should be measured
 - `DEFENSE.md` — current claims and what evidence backs each one
+
+## Quest hand stream
+
+A Meta Quest app (`quest_app/`, Godot 4) streams the hand-tracking skeleton
+over Wi-Fi to a PC receiver (`pc_receiver/`, Python standard library only).
+
+- [docs/hand-stream/PROTOCOL.md](docs/hand-stream/PROTOCOL.md): data format
+- [docs/hand-stream/SETUP.md](docs/hand-stream/SETUP.md): setup, running, demo checklist
+
+Quick test without a headset: `python3 pc_receiver/receiver.py --port 9000`,
+then `python3 pc_receiver/fake_sender.py --host 127.0.0.1 --port 9000`.
