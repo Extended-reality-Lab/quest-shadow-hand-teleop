@@ -1,0 +1,71 @@
+"""Tests for the v1 hand stream format.
+
+Run from the repo root:
+    python -m unittest discover -s pc_receiver -v
+"""
+import unittest
+
+import protocol
+
+# 26 identical joints: position (0.0123, 1.0456, -0.321) m, identity rotation.
+JOINTS_26 = [[0.0123, 1.0456, -0.321, 0.0, 0.0, 0.0, 1.0]] * 26
+JOINTS_26_JSON = ",".join(["[0.0123,1.0456,-0.321,0.0,0.0,0.0,1.0]"] * 26)
+
+VALID_TRACKED = (
+    b'{"v":1,"seq":1234,"t_us":52341234,"hand":"left","tracked":true,'
+    b'"source":"optical","joints":[' + JOINTS_26_JSON.encode() + b"]}"
+)
+VALID_LOST = (
+    b'{"v":1,"seq":1235,"t_us":52341300,"hand":"right","tracked":false,'
+    b'"source":"unknown","joints":[]}'
+)
+
+
+class ParseTest(unittest.TestCase):
+    def test_valid_tracked_datagram_parses(self):
+        msg = protocol.parse(VALID_TRACKED)
+        self.assertEqual(msg["hand"], "left")
+        self.assertEqual(msg["seq"], 1234)
+        self.assertEqual(msg["t_us"], 52341234)
+        self.assertTrue(msg["tracked"])
+        self.assertEqual(len(msg["joints"]), 26)
+        self.assertEqual(msg["joints"][1], [0.0123, 1.0456, -0.321, 0.0, 0.0, 0.0, 1.0])
+
+    def test_untracked_with_empty_joints_parses(self):
+        msg = protocol.parse(VALID_LOST)
+        self.assertEqual(msg["hand"], "right")
+        self.assertFalse(msg["tracked"])
+        self.assertEqual(msg["joints"], [])
+
+    def test_wrong_joint_count_is_rejected(self):
+        data = VALID_TRACKED.replace(b"[0.0123,1.0456,-0.321,0.0,0.0,0.0,1.0],", b"", 1)
+        with self.assertRaises(protocol.ProtocolError):
+            protocol.parse(data)
+
+    def test_tracked_without_joints_is_rejected(self):
+        data = VALID_LOST.replace(b'"tracked":false', b'"tracked":true')
+        with self.assertRaises(protocol.ProtocolError):
+            protocol.parse(data)
+
+    def test_unknown_hand_is_rejected(self):
+        data = VALID_LOST.replace(b'"right"', b'"middle"')
+        with self.assertRaises(protocol.ProtocolError):
+            protocol.parse(data)
+
+    def test_invalid_json_is_rejected(self):
+        with self.assertRaises(protocol.ProtocolError):
+            protocol.parse(b'{"v":1, "seq":')
+
+    def test_non_utf8_is_rejected(self):
+        with self.assertRaises(protocol.ProtocolError):
+            protocol.parse(b"\xff\xfe\x00")
+
+    def test_round_trip_rounds_to_four_decimals(self):
+        msg = protocol.make_message(7, 1000, "left", True, "optical",
+                                    [[0.123456, 1.0, -0.5, 0.0, 0.0, 0.0, 1.0]] * 26)
+        parsed = protocol.parse(protocol.encode(msg))
+        self.assertEqual(parsed["joints"][0][0], 0.1235)
+
+
+if __name__ == "__main__":
+    unittest.main()
