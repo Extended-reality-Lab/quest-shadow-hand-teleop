@@ -22,8 +22,8 @@ this file first and bump `v`.
 | `seq`     | integer ≥ 0     | Counter in the app. Increases by 1 for every datagram sent; both hands share it. A jump of more than 1 means datagrams were lost. A smaller value means the app restarted. |
 | `t_us`    | integer ≥ 0     | Headset monotonic time in microseconds since the app started (Godot `Time.get_ticks_usec()`). Not wall-clock time. The receiver logs its own receive time next to it. |
 | `hand`    | string          | `"left"` or `"right"`. |
-| `tracked` | boolean         | `true` only when the runtime has current tracking data for this hand **and** the data comes from optical hand tracking. Data emulated from a held controller counts as `false`. |
-| `source`  | string          | `"optical"`, `"controller"` or `"unknown"`, as the runtime reports it. |
+| `tracked` | boolean         | `true` only when the runtime has current tracking data for this hand **and** the data is not emulated from a held controller. Controller-emulated data counts as `false`. |
+| `source`  | string          | `"optical"`, `"controller"` or `"unknown"`, as the runtime reports it (Godot `XRHandTracker.hand_tracking_source`: `UNOBSTRUCTED` → `"optical"`, `CONTROLLER` → `"controller"`, anything else → `"unknown"`). A runtime without the `XR_EXT_hand_tracking_data_source` extension may report `"unknown"` for real optical tracking, so `tracked` does not require `"optical"`. |
 | `joints`  | list            | 26 entries when `tracked` is `true`; an empty list when `tracked` is `false`. |
 
 The app keeps sending datagrams with `tracked: false` while a hand is not
