@@ -4,6 +4,7 @@ Shared by receiver.py, fake_sender.py and test_protocol.py.
 The format is documented in docs/hand-stream/PROTOCOL.md; keep the two in sync.
 """
 import json
+import math
 
 VERSION = 1
 HANDS = ("left", "right")
@@ -55,7 +56,8 @@ def _is_int(value):
 
 
 def _is_number(value):
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    # json.loads accepts NaN and Infinity; they are not valid joint values.
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
 def parse(data):
@@ -67,12 +69,14 @@ def parse(data):
         raise ProtocolError(f"datagram too large: {len(data)} bytes")
     try:
         msg = json.loads(data.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ProtocolError(f"not UTF-8 JSON: {exc}") from exc
+    except (ValueError, RecursionError) as exc:
+        # ValueError covers bad UTF-8, bad JSON and huge integers; deep nesting
+        # raises RecursionError. Neither may crash the receiver.
+        raise ProtocolError(f"not valid UTF-8 JSON: {exc}") from exc
 
     if not isinstance(msg, dict):
         raise ProtocolError("top level is not a JSON object")
-    if msg.get("v") != VERSION:
+    if not _is_int(msg.get("v")) or msg["v"] != VERSION:
         raise ProtocolError(f"unsupported version: {msg.get('v')!r}")
     for key in ("seq", "t_us"):
         if not _is_int(msg.get(key)) or msg[key] < 0:

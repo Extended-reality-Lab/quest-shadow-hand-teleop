@@ -63,11 +63,15 @@ class SeqCounter:
         self.last_seq = None
         self.lost = 0
 
+    RESTART_JUMP = 1000  # a seq this far below the last one means the app restarted
+
     def update(self, seq):
-        if self.last_seq is not None and seq > self.last_seq + 1:
+        if self.last_seq is None or seq + self.RESTART_JUMP < self.last_seq:
+            self.last_seq = seq  # first packet, or the app restarted: resync
+        elif seq > self.last_seq:
             self.lost += seq - self.last_seq - 1
-        # A smaller seq means the app restarted (or a late packet): just resync.
-        self.last_seq = seq
+            self.last_seq = seq
+        # Otherwise a late (reordered) packet: it was already counted as lost.
 
 
 def lan_ip():
@@ -107,8 +111,7 @@ def main():
     args = parser.parse_args()
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.bind((args.bind, args.port))
+    sock.bind((args.bind, args.port))  # fails loudly if another receiver holds the port
     sock.settimeout(0.05)  # wake up regularly so timeouts show even with no traffic
 
     print(f"Listening on {args.bind}:{args.port}")
@@ -124,10 +127,10 @@ def main():
         while True:
             try:
                 data, _addr = sock.recvfrom(65535)
-            except TimeoutError:
-                data = None
-            except ConnectionResetError:
-                # Windows reports ICMP "port unreachable" this way; ignore it.
+            except OSError:
+                # The 50 ms poll timeout (socket.timeout is an OSError on every
+                # Python 3 version) or, on Windows, a ConnectionResetError for an
+                # ICMP "port unreachable". Neither is a reason to stop.
                 data = None
 
             if data is not None:

@@ -70,6 +70,8 @@ def main():
     parser.add_argument("--rate", type=float, default=60.0, help="frames per second")
     parser.add_argument("--seconds", type=float, default=0.0, help="run time; 0 = until Ctrl+C")
     args = parser.parse_args()
+    if args.rate <= 0:
+        parser.error("--rate must be positive")
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)  # allows 255.255.255.255

@@ -105,11 +105,42 @@ class HandStateTest(unittest.TestCase):
 
 
 class SeqCounterTest(unittest.TestCase):
-    def test_gap_is_counted_and_restart_is_not(self):
+    def test_gap_is_counted(self):
         counter = receiver.SeqCounter()
-        for seq in (1, 2, 5, 6, 0, 1):
+        for seq in (1, 2, 5, 6):
             counter.update(seq)
         self.assertEqual(counter.lost, 2)
+
+    def test_reordered_packet_is_not_counted_twice(self):
+        counter = receiver.SeqCounter()
+        for seq in (1, 3, 2, 4, 5):
+            counter.update(seq)
+        self.assertEqual(counter.lost, 1)
+
+    def test_app_restart_is_not_a_gap(self):
+        counter = receiver.SeqCounter()
+        for seq in (5000, 5001, 0, 1):
+            counter.update(seq)
+        self.assertEqual(counter.lost, 0)
+
+
+class MalformedInputTest(unittest.TestCase):
+    def test_huge_integer_is_rejected_not_raised(self):
+        with self.assertRaises(protocol.ProtocolError):
+            protocol.parse(b'{"v":1,"seq":' + b"9" * 5000 + b"}")
+
+    def test_deep_nesting_is_rejected_not_raised(self):
+        with self.assertRaises(protocol.ProtocolError):
+            protocol.parse(b"[" * 3000 + b"]" * 3000)
+
+    def test_nan_joint_is_rejected(self):
+        data = VALID_TRACKED.replace(b"0.0123", b"NaN", 1)
+        with self.assertRaises(protocol.ProtocolError):
+            protocol.parse(data)
+
+    def test_boolean_version_is_rejected(self):
+        with self.assertRaises(protocol.ProtocolError):
+            protocol.parse(VALID_LOST.replace(b'"v":1', b'"v":true'))
 
 
 if __name__ == "__main__":
