@@ -22,7 +22,7 @@ this file first and bump `v`.
 | `seq`     | integer ≥ 0     | Counter in the app. Increases by 1 for every datagram sent; both hands share it. A jump of more than 1 means datagrams were lost. A smaller value means the app restarted. |
 | `t_us`    | integer ≥ 0     | Headset monotonic time in microseconds since the app started (Godot `Time.get_ticks_usec()`). Not wall-clock time. The receiver logs its own receive time next to it. |
 | `hand`    | string          | `"left"` or `"right"`. |
-| `tracked` | boolean         | `true` only when the runtime has current tracking data for this hand **and** the data is not emulated from a held controller. Controller-emulated data counts as `false`. |
+| `tracked` | boolean         | `true` only when the runtime has current tracking data for this hand, **every** joint has a valid position and orientation, and the data is not emulated from a held controller. Controller-emulated data counts as `false`. |
 | `source`  | string          | `"optical"`, `"controller"` or `"unknown"`, as the runtime reports it (Godot `XRHandTracker.hand_tracking_source`: `UNOBSTRUCTED` → `"optical"`, `CONTROLLER` → `"controller"`, anything else → `"unknown"`). A runtime without the `XR_EXT_hand_tracking_data_source` extension may report `"unknown"` for real optical tracking, so `tracked` does not require `"optical"`. |
 | `joints`  | list            | 26 entries when `tracked` is `true`; an empty list when `tracked` is `false`. |
 
@@ -35,8 +35,13 @@ tracked) from **connection loss** (no packets at all).
 Each entry is `[px, py, pz, qx, qy, qz, qw]`:
 
 - `px, py, pz`: joint position in metres.
-- `qx, qy, qz, qw`: joint orientation as a unit quaternion, **w last**.
-- Every number is rounded to 4 decimals (0.1 mm for positions).
+- `qx, qy, qz, qw`: joint orientation as a unit quaternion, **w last**, with
+  `qw >= 0` (q and −q are the same rotation; the app picks the sign so that
+  consecutive samples are comparable).
+- Every number is rounded to 4 decimals (0.1 mm for positions). After rounding
+  a quaternion's norm can differ from 1 by about 1e-4; normalise before strict
+  use.
+- NaN and Infinity are never sent; the receiver rejects them.
 
 The order is the OpenXR `XR_EXT_hand_tracking` joint order. It is identical to
 Godot's `XRHandTracker.HandJoint` enum, so the app sends joint `i` as enum

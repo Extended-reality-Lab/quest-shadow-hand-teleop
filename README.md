@@ -97,5 +97,5 @@ over Wi-Fi to a PC receiver (`pc_receiver/`, Python standard library only).
 - [docs/hand-stream/PROTOCOL.md](docs/hand-stream/PROTOCOL.md): data format
 - [docs/hand-stream/SETUP.md](docs/hand-stream/SETUP.md): setup, running, demo checklist
 
-Quick test without a headset: `python3 pc_receiver/receiver.py --port 9000`,
+Quick test without a headset: `python3 pc_receiver/receiver.py --port 9000 --bind 127.0.0.1`,
 then `python3 pc_receiver/fake_sender.py --host 127.0.0.1 --port 9000`.

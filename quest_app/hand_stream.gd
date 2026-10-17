@@ -8,10 +8,12 @@ const CONFIG_PATH := "user://hand_stream.cfg"  # optional override, see SETUP.md
 const JOINT_COUNT := XRHandTracker.HAND_JOINT_MAX  # 26, OpenXR joint order
 const HANDS := ["left", "right"]
 const HAND_COLORS := {"left": Color(0.2, 0.6, 1.0), "right": Color(1.0, 0.5, 0.1)}
+const VALID_POSE := XRHandTracker.HAND_JOINT_FLAG_POSITION_VALID | XRHandTracker.HAND_JOINT_FLAG_ORIENTATION_VALID
 
 var host := DEFAULT_HOST
 var port := DEFAULT_PORT
 var udp := PacketPeerUDP.new()
+var dest_ok := false  # false when the configured host cannot be resolved
 var seq := 0
 var last_warning_ms := -10000
 var spheres := {"left": [], "right": []}  # one small sphere per joint, for the wearer
@@ -32,8 +34,9 @@ func _ready() -> void:
 	print("Hand Stream: user data dir = ", OS.get_user_data_dir())
 	udp.set_broadcast_enabled(true)  # needed for 255.255.255.255, harmless otherwise
 	var err := udp.set_dest_address(host, port)
-	if err != OK:
-		push_warning("Hand Stream: bad destination %s:%d (error %d)" % [host, port, err])
+	dest_ok = err == OK
+	if not dest_ok:
+		push_warning("Hand Stream: bad destination %s:%d (error %d), not sending" % [host, port, err])
 	print("Hand Stream: sending to %s:%d" % [host, port])
 	_make_spheres()
 
@@ -51,11 +54,16 @@ func _process(_delta: float) -> void:
 
 ## Reads host and port from user://hand_stream.cfg if the file exists.
 func _load_config() -> void:
+	if not FileAccess.file_exists(CONFIG_PATH):
+		return  # no override: keep broadcasting
 	var cfg := ConfigFile.new()
-	if cfg.load(CONFIG_PATH) == OK:
-		host = str(cfg.get_value("stream", "host", DEFAULT_HOST))
-		port = int(cfg.get_value("stream", "port", DEFAULT_PORT))
-		print("Hand Stream: loaded ", CONFIG_PATH)
+	var err := cfg.load(CONFIG_PATH)
+	if err != OK:
+		push_warning("Hand Stream: cannot parse %s (error %d), using broadcast" % [CONFIG_PATH, err])
+		return
+	host = str(cfg.get_value("stream", "host", DEFAULT_HOST))
+	port = int(cfg.get_value("stream", "port", DEFAULT_PORT))
+	print("Hand Stream: loaded ", CONFIG_PATH)
 
 
 func _build_message(hand: String, tracker: XRHandTracker) -> Dictionary:
@@ -73,8 +81,15 @@ func _build_message(hand: String, tracker: XRHandTracker) -> Dictionary:
 	var joints := []
 	if tracked:
 		for j in JOINT_COUNT:
+			# A joint without a valid pose would be sent as the origin: treat the hand as lost.
+			if (tracker.get_hand_joint_flags(j) & VALID_POSE) != VALID_POSE:
+				tracked = false
+				joints = []
+				break
 			var xf: Transform3D = tracker.get_hand_joint_transform(j)
 			var q := xf.basis.get_rotation_quaternion()
+			if q.w < 0.0:
+				q = -q  # q and -q are the same rotation; keep w >= 0 so samples are comparable
 			joints.append([_r(xf.origin.x), _r(xf.origin.y), _r(xf.origin.z),
 					_r(q.x), _r(q.y), _r(q.z), _r(q.w)])
 
@@ -95,6 +110,8 @@ func _r(x: float) -> float:
 
 
 func _send(msg: Dictionary) -> void:
+	if not dest_ok:
+		return
 	var err := udp.put_packet(JSON.stringify(msg).to_utf8_buffer())
 	if err == OK:
 		seq += 1

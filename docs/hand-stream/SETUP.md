@@ -26,7 +26,12 @@ py pc_receiver\receiver.py --port 9000
 ```
 
 At start it prints the PC's LAN address, for example
-`Point the headset at 192.168.43.17:9000`. Options:
+`Point the headset at 192.168.43.17:9000`. This is the address of the
+interface with the default route. If the PC has several networks (Ethernet,
+VPN, hotspot), check the hotspot address with `ifconfig` (macOS) or
+`ipconfig` (Windows) instead. Run only one receiver per port: a second one
+fails with "address already in use". The receiver merges all senders, so run
+one headset (or one fake sender) at a time. Options:
 
 - `--log hands.jsonl`: append every valid datagram as one JSON line, with the
   PC receive time `rx_time` added.
@@ -40,10 +45,10 @@ network). Without admin rights, use a phone hotspot marked as a private network.
 
 ### Test without a headset
 
-Terminal 1:
+Terminal 1 (loopback only, nothing is exposed on the network):
 
 ```
-python3 pc_receiver/receiver.py --port 9000
+python3 pc_receiver/receiver.py --port 9000 --bind 127.0.0.1
 ```
 
 Terminal 2:
