@@ -6,6 +6,6 @@ if (-not (Get-Command py -ErrorAction SilentlyContinue)) {
 
 py -3.12 -m venv .venv
 & .\.venv\Scripts\python.exe -m pip install --upgrade pip
-& .\.venv\Scripts\python.exe -m pip install -r requirments.txt
+& .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 
 Write-Host "Setup complete. Run: .\.venv\Scripts\python.exe probe.py"
