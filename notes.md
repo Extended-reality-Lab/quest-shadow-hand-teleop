@@ -28,7 +28,7 @@ The Quest does NOT give angles. I compute the angles myself.
 - mocap: a body I move myself, outside the physics (the wrist above the table).
 
 ## Stages
-- [ ] 0. Teams: write how I understood the task. Quest: pick one, reset, label, charge, turn on hand tracking.
+- [yes] 0. Teams: write how I understood the task. Quest: pick one, reset, label, charge, turn on hand tracking.
 - [ ] 1. inspect.py: joints, ranges, actuators. Why are there more joints than 20 sliders? (<tendon>)
 - [ ] 2. "Fist" pose through ctrl. Check: error < 0.01 rad after 2 s.
 - [ ] 3. Quest data into Python. Check: fps; wrist → index fingertip = ruler ±1 cm.
@@ -53,5 +53,8 @@ Plus: what the robot lacks, and what the human hand lacks.
 - AnyTeleop / dex-retargeting
 - MuJoCo docs: mocap
 
-## By Monday
-Stages 0–2 + choose the transport.
+## notes after talking with proffesor 
+
+I need to male an issue and action and wll ogonise my github 
+i need to create action an then i need to whrite down a goood description 
+
