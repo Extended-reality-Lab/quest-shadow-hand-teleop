@@ -144,8 +144,8 @@ class Teleop:
 
     def recenter(self, joints):
         """Make the current wrist position HOME and the hand's forward +Y."""
-        self.origin = joints[WRIST].copy()
         forward = QUEST_TO_WORLD @ self.retarget.human_frame(joints)[:, 2]
+        self.origin = joints[WRIST].copy()
         heading = np.arctan2(forward[0], forward[1])  # angle from +Y, about +Z
         c, s = np.cos(heading), np.sin(heading)
         self.yaw = np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
@@ -164,10 +164,10 @@ class Teleop:
             return False
         joints = np.array(msg["joints"], dtype=float)[:, :3]
         try:
-            if self.origin is None or recenter:
-                self.recenter(joints)
             ctrl, self.error = self.retarget.solve(joints)
             human = self.retarget.human_frame(joints)
+            if self.origin is None or recenter:
+                self.recenter(joints)
         except ValueError:
             return False  # a broken frame (points on top of each other): skip it
 
@@ -243,6 +243,8 @@ def read_latest(sock, hand):
             return latest  # nothing left to read
         except ConnectionResetError:
             continue  # Windows reports an old ICMP error here; harmless
+        except OSError:
+            return latest  # other socket trouble: hold the pose, try next frame
         try:
             msg = protocol.parse(data)
         except protocol.ProtocolError:
