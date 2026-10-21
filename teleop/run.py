@@ -27,6 +27,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "pc_receiver"))
 
 import protocol
+from receiver import lan_ip
 from retarget import WRIST, Retargeter, build_hand_spec
 
 TABLE_TOP = 0.75  # m
@@ -36,7 +37,10 @@ HOME = np.array([0.0, 0.25, TABLE_TOP + 0.20])
 WORKSPACE_LOW = np.array([-0.6, -0.2, TABLE_TOP + 0.03])
 WORKSPACE_HIGH = np.array([0.6, 0.9, TABLE_TOP + 0.6])
 MAX_HAND_SPEED = 1.5  # m/s
+MAX_HAND_TURN_SPEED = 6.0  # rad/s
 MAX_JOINT_SPEED = 8.0  # rad/s
+MAX_FRAME_GAP = 1 / 30  # s; after a long gap the speed limits still count one frame
+MAX_CATCH_UP = 0.05  # s of simulation per drawn frame at most
 TIMEOUT = 0.5  # s without packets -> the hand holds still
 KEY_ENTER = 257  # GLFW key code
 
@@ -97,6 +101,19 @@ def build_scene(hand):
     return spec.compile()
 
 
+def limit_rotation(current, target, max_angle):
+    """Turn quaternion `current` towards `target` by at most `max_angle` rad."""
+    if np.dot(current, target) < 0:
+        target = -target  # q and -q are the same rotation; take the short way
+    cos_half = np.clip(np.dot(current, target), -1.0, 1.0)
+    angle = 2 * np.arccos(cos_half)
+    if angle <= max_angle:
+        return target
+    half, f = angle / 2, max_angle / angle
+    q = (np.sin((1 - f) * half) * current + np.sin(f * half) * target) / np.sin(half)
+    return q / np.linalg.norm(q)
+
+
 class Teleop:
     """Quest message -> safe mocap pose and actuator targets for one hand."""
 
@@ -105,6 +122,8 @@ class Teleop:
         self.retarget = Retargeter(hand)
         prefix = "rh_" if hand == "right" else "lh_"
         self.mocap_id = model.body("hand_target").mocapid[0]
+        free_joint = model.body(prefix + "forearm").jntadr[0]
+        self.forearm_qpos = model.jnt_qposadr[free_joint]  # 3 position + 4 quaternion
 
         # Pose of the palm inside the forearm at wrist angle 0, so a wanted
         # palm pose can be turned into a forearm (mocap) pose.
@@ -131,36 +150,46 @@ class Teleop:
         c, s = np.cos(heading), np.sin(heading)
         self.yaw = np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
 
-    def update(self, msg, now):
+    def forearm_pose(self, palm_rot, palm_pos):
+        """Forearm (mocap) position and quaternion that put the palm at this pose."""
+        rot = palm_rot @ self.palm_in_forearm_rot.T
+        pos = palm_pos - rot @ self.palm_in_forearm_pos
+        quat = np.zeros(4)
+        mujoco.mju_mat2Quat(quat, rot.flatten())
+        return pos, quat
+
+    def update(self, msg, now, recenter=False):
         """Use one tracked message. Returns False if it was not used."""
         if not msg["tracked"]:
             return False
         joints = np.array(msg["joints"], dtype=float)[:, :3]
-        if self.origin is None:
-            self.recenter(joints)
-
-        ctrl, self.error = self.retarget.solve(joints)
+        try:
+            if self.origin is None or recenter:
+                self.recenter(joints)
+            ctrl, self.error = self.retarget.solve(joints)
+            human = self.retarget.human_frame(joints)
+        except ValueError:
+            return False  # a broken frame (points on top of each other): skip it
 
         # Palm pose in the world: human palm axes, turned into world axes,
         # matched to the robot's palm axes.
         to_world = self.yaw @ QUEST_TO_WORLD
-        human = to_world @ self.retarget.human_frame(joints)
-        palm_rot = human @ self.retarget.robot_frame.T
+        palm_rot = to_world @ human @ self.retarget.robot_frame.T
         palm_pos = HOME + to_world @ (joints[WRIST] - self.origin)
-        forearm_rot = palm_rot @ self.palm_in_forearm_rot.T
-        forearm_pos = palm_pos - forearm_rot @ self.palm_in_forearm_pos
+        forearm_pos, quat = self.forearm_pose(palm_rot, palm_pos)
 
-        # Safety filter: workspace box, speed limits on the hand and joints.
+        # Safety filter: workspace box, speed limits on position, rotation and
+        # joints. After a long gap (tracking lost) the limits count one frame
+        # only, so the hand does not jump to where the user's hand reappears.
         forearm_pos = np.clip(forearm_pos, WORKSPACE_LOW, WORKSPACE_HIGH)
         if self.last_update is not None:
-            dt = max(now - self.last_update, 1e-3)
+            dt = min(max(now - self.last_update, 1e-3), MAX_FRAME_GAP)
             step = forearm_pos - self.mocap_pos
             max_step = MAX_HAND_SPEED * dt
             if np.linalg.norm(step) > max_step:
                 forearm_pos = self.mocap_pos + step * (max_step / np.linalg.norm(step))
+            quat = limit_rotation(self.mocap_quat, quat, MAX_HAND_TURN_SPEED * dt)
             ctrl = self.ctrl + np.clip(ctrl - self.ctrl, -MAX_JOINT_SPEED * dt, MAX_JOINT_SPEED * dt)
-        quat = np.zeros(4)
-        mujoco.mju_mat2Quat(quat, forearm_rot.flatten())
 
         self.ctrl, self.mocap_pos, self.mocap_quat = ctrl, forearm_pos, quat
         self.last_update = now
@@ -187,14 +216,12 @@ def place_hand_at_home(model, data, teleop, hand):
     forward = np.array([0.0, 1.0, 0.0])
     side = np.array([-1.0 if hand == "right" else 1.0, 0.0, 0.0])  # towards the thumb
     palm_rot = np.column_stack([side, np.cross(forward, side), forward]) @ teleop.retarget.robot_frame.T
-    rot = palm_rot @ teleop.palm_in_forearm_rot.T
-    pos = HOME - rot @ teleop.palm_in_forearm_pos
-    quat = np.zeros(4)
-    mujoco.mju_mat2Quat(quat, rot.flatten())
+    pos, quat = teleop.forearm_pose(palm_rot, HOME)
     data.mocap_pos[teleop.mocap_id] = pos
     data.mocap_quat[teleop.mocap_id] = quat
-    data.qpos[0:3] = pos  # the forearm free joint is the first joint
-    data.qpos[3:7] = quat
+    adr = teleop.forearm_qpos
+    data.qpos[adr : adr + 3] = pos
+    data.qpos[adr + 3 : adr + 7] = quat
     teleop.mocap_pos, teleop.mocap_quat = pos, quat
     mujoco.mj_forward(model, data)
 
@@ -212,8 +239,10 @@ def read_latest(sock, hand):
     while True:
         try:
             data, _ = sock.recvfrom(protocol.MAX_DATAGRAM_BYTES + 1)
-        except (BlockingIOError, OSError):
-            return latest
+        except BlockingIOError:
+            return latest  # nothing left to read
+        except ConnectionResetError:
+            continue  # Windows reports an old ICMP error here; harmless
         try:
             msg = protocol.parse(data)
         except protocol.ProtocolError:
@@ -234,6 +263,7 @@ def main():
     place_hand_at_home(model, data, teleop, args.hand)
     sock = open_socket(args.port)
     print(f"Listening on UDP port {args.port} for the {args.hand} hand. Enter in the viewer = re-centre.")
+    print(f"Point the headset at {lan_ip()}:{args.port} (or leave the app on broadcast)")
 
     recenter_requested = False
 
@@ -250,14 +280,15 @@ def main():
         while viewer.is_running():
             now = time.monotonic()
             msg = read_latest(sock, args.hand)
-            if msg is not None:
-                if recenter_requested and msg["tracked"]:
-                    teleop.recenter(np.array(msg["joints"], dtype=float)[:, :3])
-                    recenter_requested = False
-                teleop.update(msg, now)
+            if msg is not None and teleop.update(msg, now, recenter=recenter_requested):
+                recenter_requested = False
             teleop.apply(data)
 
             # Step the physics until simulated time catches up with the clock.
+            # If the window stalled, skip ahead instead of running a backlog.
+            behind = (now - start) - data.time
+            if behind > MAX_CATCH_UP:
+                start += behind - MAX_CATCH_UP
             while data.time < now - start:
                 mujoco.mj_step(model, data)
             viewer.sync()

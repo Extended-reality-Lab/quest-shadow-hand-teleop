@@ -88,9 +88,13 @@ def palm_frame(wrist, index, middle, little):
     human and the robot hand of the same side, so this does not matter.
     """
     forward = middle - wrist
-    forward /= np.linalg.norm(forward)
     side = index - little
+    if np.linalg.norm(forward) < 1e-3:
+        raise ValueError("wrist and middle knuckle coincide")
+    forward /= np.linalg.norm(forward)
     side -= forward * np.dot(side, forward)  # make it perpendicular
+    if np.linalg.norm(side) < 1e-3:
+        raise ValueError("knuckles in a line with the wrist")
     side /= np.linalg.norm(side)
     back = np.cross(forward, side)
     return np.column_stack([side, back, forward])
@@ -164,8 +168,7 @@ class Retargeter:
         starting point, so consecutive frames converge in a few iterations.
         """
         m, d = self.model, self.data
-        mujoco.mj_kinematics(m, d)  # the palm may not move, but keep it current
-        goal = self.targets(joints)
+        goal = self.targets(joints)  # raises ValueError for a broken frame
         jac = np.zeros((3, m.nv))
         for _ in range(self.iterations):
             mujoco.mj_kinematics(m, d)
@@ -187,6 +190,8 @@ class Retargeter:
             # Every joint here is a hinge, so qpos index == dof index.
             d.qpos[self.dofs] += dq
             np.clip(d.qpos, self.lower, self.upper, out=d.qpos)
+        if not np.all(np.isfinite(d.qpos)):
+            d.qpos[:] = 0  # never let a bad frame poison the next ones
 
         mujoco.mj_fwdPosition(m, d)  # also fills actuator_length
         error = self._mean_error(goal)

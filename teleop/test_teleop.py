@@ -16,7 +16,15 @@ sys.path.insert(0, os.path.join(HERE, "..", "pc_receiver"))
 import fake_sender
 import protocol
 from retarget import TARGETS, WRIST, Retargeter
-from run import WORKSPACE_LOW, Teleop, build_scene, place_hand_at_home
+from run import (
+    MAX_FRAME_GAP,
+    MAX_HAND_SPEED,
+    MAX_HAND_TURN_SPEED,
+    WORKSPACE_LOW,
+    Teleop,
+    build_scene,
+    place_hand_at_home,
+)
 
 
 def robot_skeleton(retargeter, qpos):
@@ -127,6 +135,28 @@ class TeleopTest(unittest.TestCase):
         for i in range(600):
             self.teleop.update(message(far), (i + 1) / 60)
         self.assertGreaterEqual(self.teleop.mocap_pos[2], WORKSPACE_LOW[2] - 1e-9)
+
+
+    def test_hand_does_not_jump_when_tracking_comes_back_elsewhere(self):
+        self.run_fake(1.0)
+        before_pos, before_quat = self.teleop.mocap_pos.copy(), self.teleop.mocap_quat.copy()
+        joints = np.array(fake_sender.synthetic_hand("right", 1.0))[:, :3]
+        moved = joints + np.array([0.3, 0.0, 0.0])  # 30 cm away, 3 s later
+        flipped = moved.copy()
+        flipped[:, 1] = 2 * moved[WRIST, 1] - moved[:, 1]  # hand upside down
+        self.teleop.update(message(flipped), 4.0)
+        step = np.linalg.norm(self.teleop.mocap_pos - before_pos)
+        self.assertLessEqual(step, MAX_HAND_SPEED * MAX_FRAME_GAP + 1e-9)
+        turn = 2 * np.arccos(min(1.0, abs(np.dot(self.teleop.mocap_quat, before_quat))))
+        self.assertLessEqual(turn, MAX_HAND_TURN_SPEED * MAX_FRAME_GAP + 1e-6)
+
+    def test_broken_frame_is_skipped(self):
+        self.run_fake(0.5)
+        before = self.teleop.ctrl.copy()
+        same_point = np.zeros((26, 3))  # every joint at one point
+        self.assertFalse(self.teleop.update(message(same_point), 0.6))
+        np.testing.assert_array_equal(self.teleop.ctrl, before)
+        self.assertTrue(np.all(np.isfinite(self.teleop.retarget.data.qpos)))
 
 
 class GraspTest(unittest.TestCase):

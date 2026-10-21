@@ -104,15 +104,24 @@ points match the human points:
 The simulation never takes raw input:
 
 - the hand target stays inside a box above the table (`WORKSPACE_LOW/HIGH`);
-- the hand moves at most 1.5 m/s, each joint target at most 8 rad/s;
+- the hand moves at most 1.5 m/s and turns at most 6 rad/s, each joint
+  target at most 8 rad/s;
+- after a gap (tracking lost, then the hand reappears elsewhere) the limits
+  count one frame only, so the robot glides to the new pose instead of jumping;
 - untracked messages are ignored, so on tracking loss or after a network
-  drop the hand holds its last pose.
+  drop the hand holds its last pose;
+- a broken frame (points on top of each other) is skipped.
+
+The forearm position is limited, not every fingertip: fingers pointed down can
+still press into the table, and contact stops them there.
 
 ### 5. Main loop (`main`)
 
 Each turn: read the newest datagram for the chosen hand, update the targets,
 write them into `data`, step the physics until simulated time catches up with
-the wall clock (timestep 2 ms), sync the viewer.
+the wall clock (timestep 2 ms, at most 50 ms of catch-up per frame), sync the
+viewer. At start it prints the PC address to give the headset, like the
+receiver.
 
 ## What the tests check
 
@@ -123,6 +132,8 @@ the wall clock (timestep 2 ms), sync the viewer.
 | `test_hand_follows_the_target_and_stays_in_limits` | 3 s of the fake hand: no NaN, every ctrl in range, forearm within 2 cm of the target |
 | `test_tracking_loss_holds_the_last_pose` | untracked messages leave the targets unchanged |
 | `test_hand_target_stays_in_the_workspace` | a hand 5 m below the floor keeps the target above the table |
+| `test_hand_does_not_jump_when_tracking_comes_back_elsewhere` | 3 s gap, hand back 30 cm away and upside down: one frame moves and turns no more than the limits allow |
+| `test_broken_frame_is_skipped` | all 26 points at one spot: the frame is refused, no NaN reaches the solver |
 | `test_hand_can_lift_the_ball` | scripted grasp without the Quest: the ball rises more than 5 cm and is still held after 3 s |
 
 ## Known limits
