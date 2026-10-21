@@ -52,10 +52,13 @@ func _process(_delta: float) -> void:
 	label.text = "\n".join(lines)
 
 
-## Reads host and port from user://hand_stream.cfg if the file exists.
+## Picks the default host, then reads host and port from user://hand_stream.cfg
+## if the file exists.
 func _load_config() -> void:
+	if not OS.has_feature("android"):
+		host = "127.0.0.1"  # run on a PC over Link: send to the receiver on the same PC
 	if not FileAccess.file_exists(CONFIG_PATH):
-		return  # no override: keep broadcasting
+		return  # no override: keep the default host
 	var cfg := ConfigFile.new()
 	var err := cfg.load(CONFIG_PATH)
 	if err != OK:

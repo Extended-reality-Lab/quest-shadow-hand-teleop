@@ -214,17 +214,12 @@ the headset only acts as the display and tracker over the cable.
    (without it, hand data is not passed over Link).
 3. Download Godot 4.7.2 for Windows (a zip, no installer), open
    `quest_app/project.godot`. The vendors plugin is not needed on the PC.
-4. Create `%APPDATA%\Godot\app_userdata\Hand Stream\hand_stream.cfg` so the
-   app sends to the same machine:
-
-   ```
-   [stream]
-   host="127.0.0.1"
-   port=9000
-   ```
-
-5. Start the receiver (`py pc_receiver\receiver.py --port 9000`), start Link
-   in the headset, then press **Play** in Godot.
+4. Nothing to configure: on a PC the app sends to `127.0.0.1:9000` by default.
+   A `hand_stream.cfg` in `%APPDATA%\Godot\app_userdata\Hand Stream\` still
+   overrides it (same format as on the headset).
+5. Start the receiver (`py pc_receiver\receiver.py --port 9000`) or the MuJoCo
+   teleop (`.\.venv\Scripts\python.exe teleop\run.py`), start Link in the
+   headset, then press **Play** in Godot.
 
 Limits of this path: it needs the PC and the cable, the hand-tracking data
 source may report `"unknown"`, and the rate follows the Link frame rate. It is

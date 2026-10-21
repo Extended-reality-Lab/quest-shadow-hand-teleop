@@ -8,4 +8,4 @@ py -3.12 -m venv .venv
 & .\.venv\Scripts\python.exe -m pip install --upgrade pip
 & .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 
-Write-Host "Setup complete. Run: .\.venv\Scripts\python.exe probe.py"
+Write-Host "Setup complete. Check: .\.venv\Scripts\python.exe -m unittest discover -s teleop"
