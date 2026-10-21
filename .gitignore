@@ -14,3 +14,14 @@ __pycache__/
 .env
 .env.*
 !.env.example
+# Quest hand stream app (Godot)
+.godot/
+build/
+*.apk
+*.aab
+*.keystore
+*.jks
+export_credentials.cfg
+quest_app/android/
+quest_app/addons/godotopenxrvendors/
+*.jsonl

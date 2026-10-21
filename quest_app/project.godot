@@ -1,0 +1,25 @@
+; Engine configuration file.
+; Godot 4.7, OpenXR on Meta Quest. See docs/hand-stream/SETUP.md.
+
+config_version=5
+
+[application]
+
+config/name="Hand Stream"
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.7", "Mobile")
+
+[rendering]
+
+renderer/rendering_method="mobile"
+textures/vram_compression/import_etc2_astc=true
+
+[xr]
+
+openxr/enabled=true
+; 1 = Stage: origin on the floor at the centre of the guardian boundary.
+openxr/reference_space=1
+openxr/extensions/hand_tracking=true
+openxr/extensions/hand_tracking_unobstructed_data_source=true
+openxr/extensions/hand_tracking_controller_data_source=false
+shaders/enabled=true
