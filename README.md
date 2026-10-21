@@ -34,6 +34,7 @@ LOG.md                   work log
 TECHNOLOGY_RESEARCH.md   simulator choice and the device-adapter architecture
 quest_app/               Meta Quest app (Godot 4) that streams the hand skeleton over Wi-Fi
 pc_receiver/             PC receiver for that stream (Python standard library only)
+teleop/                  Quest hand -> Shadow Hand in MuJoCo, with objects to grasp
 docs/hand-stream/        stream protocol and setup guide
 archive/drone/           earlier drone simulation work, not used
 CLAUDE.md, .claude/      instructions for the AI assistant, which reviews and explains rather than writes the code
@@ -89,6 +90,7 @@ over Wi-Fi to a PC receiver (`pc_receiver/`, Python standard library only).
 
 - [docs/hand-stream/PROTOCOL.md](docs/hand-stream/PROTOCOL.md): data format
 - [docs/hand-stream/SETUP.md](docs/hand-stream/SETUP.md): setup, running, demo checklist
+- [docs/hand-stream/TELEOP.md](docs/hand-stream/TELEOP.md): drive the Shadow Hand in MuJoCo with the Quest (`teleop/run.py`)
 
 Quick test without a headset: `python3 pc_receiver/receiver.py --port 9000 --bind 127.0.0.1`,
 then `python3 pc_receiver/fake_sender.py --host 127.0.0.1 --port 9000`.
