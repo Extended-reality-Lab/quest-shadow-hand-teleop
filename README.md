@@ -17,8 +17,15 @@ What exists and runs today:
 
 - **Hand model.** The Shadow Hand E3M5 (right and left) from [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie/tree/main/shadow_hand) is in `assets/shadow_hand/`. Each hand has 24 joints and 20 position actuators; the scene files add a free-floating object to manipulate. Both scenes load in MuJoCo 3.11.0.
 - **`pendulum.py`.** A first control example: a single hinge joint driven by a position actuator whose target flips between +1 and -1 rad every two seconds, shown in the interactive viewer.
+- **Quest hand stream.** A Meta Quest app streams the 26-joint hand skeleton of both hands over Wi-Fi (UDP, JSON, about 72 Hz) to a PC receiver. Tested live on 2026-10-20 with a Quest Pro.
+- **Hand teleoperation in MuJoCo.** `teleop/run.py` turns the stream into Shadow Hand motion: inverse kinematics maps the human finger joints to robot joint targets, a mocap body moves the whole hand, and a safety filter keeps the hand above the table and limits its speed. The scene has a table, a ball, a cube and a can to grasp. Eight tests pass without a headset, including a scripted lift of the ball.
 
-Not built yet: arm control, inverse kinematics, device input, VR, learning. The plan for these is in `LESSONS.md`, a sequence of lessons from loading a model to reaching a target point with inverse kinematics and driving it from an input device. Every lesson ends in a script that asserts a measured number rather than relying on what the viewer shows.
+Not done yet:
+
+- `teleop/run.py` with a live headset in the viewer: the stream and the teleop code were each tested, but not yet together.
+- Arm control (the hand currently floats on its own), learning.
+
+`LESSONS.md` is the step-by-step plan, from loading a model to inverse kinematics and device input. Every lesson ends in a script that asserts a measured number rather than relying on what the viewer shows.
 
 The repository started as a drone simulator (a Skydio X2 quadrotor model). That work stopped in October 2026 and is kept in `archive/drone/` for reference; nothing outside the archive uses it.
 
@@ -70,9 +77,6 @@ On Windows PowerShell:
 .\.venv\Scripts\python.exe -m mujoco.viewer --mjcf="$PWD\assets\shadow_hand\scene_right.xml"
 ```
 
-
-
-
 Run the pendulum example:
 
 ```bash
@@ -83,27 +87,45 @@ Run the pendulum example:
 
 On macOS, any script that opens the viewer with `launch_passive` must run under `mjpython`: the OS requires the GUI loop to own the main thread, and plain `python` raises a `RuntimeError`.
 
-## Quest hand stream
+## Quest hand stream and teleoperation
 
-A Meta Quest app (`quest_app/`, Godot 4) streams the hand-tracking skeleton
-over Wi-Fi to a PC receiver (`pc_receiver/`, Python standard library only).
+```
+Quest app  --UDP, port 9000-->  PC
+                                 |- pc_receiver/receiver.py   shows left/right and tracking state
+                                 '- teleop/run.py             drives the Shadow Hand in MuJoCo
+```
+
+Run one of the two at a time: both listen on port 9000.
 
 - [docs/hand-stream/PROTOCOL.md](docs/hand-stream/PROTOCOL.md): data format
-- [docs/hand-stream/SETUP.md](docs/hand-stream/SETUP.md): setup, running, demo checklist
-- [docs/hand-stream/TELEOP.md](docs/hand-stream/TELEOP.md): drive the Shadow Hand in MuJoCo with the Quest (`teleop/run.py`)
+- [docs/hand-stream/SETUP.md](docs/hand-stream/SETUP.md): headset setup, network, demo checklist
+- [docs/hand-stream/TELEOP.md](docs/hand-stream/TELEOP.md): how the teleoperation works and how to run it
 
-Quick test without a headset: `python3 pc_receiver/receiver.py --port 9000 --bind 127.0.0.1`,
-then `python3 pc_receiver/fake_sender.py --host 127.0.0.1 --port 9000`.
+Drive the hand in MuJoCo (stop `receiver.py` first):
+
+```bash
+.venv/bin/mjpython teleop/run.py              # macOS
+.\.venv\Scripts\python.exe teleop\run.py      # Windows
+```
+
+Hold your right hand forward, palm down; press Enter in the viewer to re-centre. `--hand left` for the left hand.
+
+Without a headset, the fake sender plays a hand that opens and closes:
+
+```bash
+python3 pc_receiver/fake_sender.py --host 127.0.0.1 --port 9000
+```
+
+Send it to `receiver.py` to check the receiver, or to `teleop/run.py` to see the robot hand move. Tests: `.venv/bin/python -m unittest discover -s teleop -v`.
+
+Network: the headset and the PC must reach each other over UDP. Some campus Wi-Fi networks block traffic between devices; SETUP.md lists the options (a phone hotspot, or the PC-over-Link fallback).
 
 ## Next steps
 
-From `LESSONS.md`:
-
-1. Inspect the loaded model: joint names and ranges, actuators and the joints they drive, total mass.
-2. Hold a pose with position actuators, then move through joint-space waypoints.
-3. Forward kinematics, then damped least-squares inverse kinematics to reach a target point.
-4. Keyboard control through the device adapter, with workspace and speed limits.
-5. VR controller teleoperation on that adapter.
+1. Run `teleop/run.py` with the live headset and grasp the objects; tune the thumb and the grasp contacts.
+2. Record a demo video.
+3. Mount the hand on a robot arm and drive the arm from the wrist pose.
+4. Use recorded teleoperation for imitation learning.
 
 ## Credits
 
