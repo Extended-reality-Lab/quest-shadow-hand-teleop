@@ -18,11 +18,10 @@ What exists and runs today:
 - **Hand model.** The Shadow Hand E3M5 (right and left) from [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie/tree/main/shadow_hand) is in `assets/shadow_hand/`. Each hand has 24 joints and 20 position actuators; the scene files add a free-floating object to manipulate. Both scenes load in MuJoCo 3.11.0.
 - **`pendulum.py`.** A first control example: a single hinge joint driven by a position actuator whose target flips between +1 and -1 rad every two seconds, shown in the interactive viewer.
 - **Quest hand stream.** A Meta Quest app streams the 26-joint hand skeleton of both hands over Wi-Fi (UDP, JSON, about 72 Hz) to a PC receiver. Tested live on 2026-10-20 with a Quest Pro.
-- **Hand teleoperation in MuJoCo.** `teleop/run.py` turns the stream into Shadow Hand motion: inverse kinematics maps the human finger joints to robot joint targets, a mocap body moves the whole hand, and a safety filter keeps the hand above the table and limits its speed. The scene has a table, a ball, a cube and a can to grasp. Eight tests pass without a headset, including a scripted lift of the ball.
+- **Hand teleoperation in MuJoCo.** `teleop/run.py` turns the stream into Shadow Hand motion: inverse kinematics maps the human finger joints to robot joint targets, a mocap body moves the whole hand, and a safety filter keeps the hand above the table and limits its speed. The scene has a table, a ball, a cube and a can to grasp. Eight tests pass without a headset, including a scripted lift of the ball. Tested with the live headset on 2026-10-22.
 
 Not done yet:
 
-- `teleop/run.py` with a live headset in the viewer: the stream and the teleop code were each tested, but not yet together.
 - Arm control (the hand currently floats on its own), learning.
 
 `LESSONS.md` is the step-by-step plan, from loading a model to inverse kinematics and device input. Every lesson ends in a script that asserts a measured number rather than relying on what the viewer shows.
@@ -119,12 +118,26 @@ Send it to `receiver.py` to check the receiver, or to `teleop/run.py` to see the
 
 Network: the headset and the PC must reach each other over UDP. Some campus Wi-Fi networks block traffic between devices; SETUP.md lists the options (a phone hotspot, or the PC-over-Link fallback).
 
-## Next steps
+## Roadmap
 
-1. Run `teleop/run.py` with the live headset and grasp the objects; tune the thumb and the grasp contacts.
-2. Record a demo video.
-3. Mount the hand on a robot arm and drive the arm from the wrist pose.
-4. Use recorded teleoperation for imitation learning.
+Each step is an issue; the [project board](../../projects) shows its status.
+
+Done:
+
+- [x] Stream the Quest hand skeleton to a PC over Wi-Fi (#5)
+- [x] Drive the Shadow Hand in MuJoCo from the Quest hand (#6)
+
+In progress:
+
+- [ ] Run the teleoperation on the lab Windows PC (#7)
+
+Planned:
+
+- [ ] Grasp objects with the live headset and tune the hand (#8)
+- [ ] Record a demo video (#9)
+- [ ] Mount the hand on a robot arm (#10)
+- [ ] Record teleoperation demonstrations for learning (#11)
+- [ ] Imitation learning baseline (#12)
 
 ## Credits
 
