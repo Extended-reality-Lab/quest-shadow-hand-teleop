@@ -44,7 +44,6 @@ pc_receiver/             PC receiver for that stream (Python standard library on
 teleop/                  Quest hand -> Shadow Hand in MuJoCo, with objects to grasp
 docs/hand-stream/        stream protocol and setup guide
 archive/drone/           earlier drone simulation work, not used
-CLAUDE.md, .claude/      instructions for the AI assistant, which reviews and explains rather than writes the code
 ```
 
 ## Setup
