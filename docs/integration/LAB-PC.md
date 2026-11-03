@@ -48,11 +48,12 @@ git config user.name
 git config user.email
 ```
 
-If either is empty or not mine:
+If either is empty or belongs to someone else, set your own GitHub name and
+email for this repository only:
 
 ```
-git config user.name "Jakhangir18"
-git config user.email "dzhohadzhoha@gmail.com"
+git config user.name "<your GitHub name>"
+git config user.email "<your GitHub email>"
 ```
 
 Check what goes into the commit (only `unity_viz/Assets`, `unity_viz/Packages`,
@@ -62,11 +63,15 @@ Check what goes into the commit (only `unity_viz/Assets`, `unity_viz/Packages`,
 git status --short
 ```
 
+First save of the project:
+
 ```
 git add unity_viz
 git commit -m "feat(unity): add the Unity project that builds the scene from the manifest"
 git push
 ```
+
+Later saves: the same three commands with a message that says what changed.
 
 If `git push` asks to sign in, sign in through the browser.
 
