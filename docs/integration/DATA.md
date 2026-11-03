@@ -172,9 +172,11 @@ Per object, every physics step:
 ### What Unity does with it (#29)
 
 - Receive on a background thread; parse with `JsonUtility`.
-- Keep the newest few messages ordered by `seq`; drop anything older than the
-  newest. A `seq` much smaller than the last one means a server restart:
-  clear the buffer.
+- Keep the newest few messages in a buffer ordered by `seq`. Discard a late
+  datagram whose `seq` is lower than the newest one already received; the
+  older messages already in the buffer stay, since interpolation needs them.
+  A `seq` much smaller than the last one means a server restart: clear the
+  buffer.
 - Render a fixed delay behind the newest message (proposed 50 ms) and
   interpolate positions linearly and rotations with slerp.
 - Apply poses by `id` to the GameObjects built from the manifest. Show

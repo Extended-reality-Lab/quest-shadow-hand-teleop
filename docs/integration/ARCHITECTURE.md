@@ -108,10 +108,10 @@ faces outward in Unity.
 | Tracking lost (hand datagrams arrive with `tracked: false`) | ignores them and holds the hand's last pose; physics keeps running, so a held object stays held or falls | keeps applying states; shows the tracking status `lost_tracking` |
 | Hand datagrams lost (none for 0.5 s, `TIMEOUT` in `teleop/run.py`) | holds the last pose; counts `seq` gaps | shows `no_packets` |
 | Tracking comes back elsewhere | speed limits make the hand glide to the new pose instead of jumping (`Teleop.update`) | nothing special |
-| State datagrams lost | — | interpolates across the gap; drops messages older than the newest `seq` it has |
+| State datagrams lost | — | interpolates across the gap; discards a late datagram whose `seq` is lower than the newest one received |
 | Server silent (no state for 0.5 s, proposed) | — | freezes the last state and shows "no connection" |
 | Server restarted (`seq` much smaller than the last one) | starts again from `seq` 0 | clears its buffer and starts again |
-| Unity behind (slow frame, garbage collection) | not affected: Unity sends nothing back | the receiver thread keeps only the newest few states; each frame uses the latest pair, older states are dropped, and no queue builds up |
+| Unity behind (slow frame, garbage collection) | not affected: Unity sends nothing back | the receiver thread keeps only the newest few states; each frame uses the pair around the render time, states older than that pair are dropped, and no queue builds up |
 | Simulation behind real time | at most 50 ms of catch-up per frame (as today) | sees `sim_time` fall behind `send_time` |
 
 ## Open questions
