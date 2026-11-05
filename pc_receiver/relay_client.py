@@ -24,7 +24,7 @@ def main():
     parser.add_argument("--local-port", type=int, default=9000, help="where teleop/run.py listens")
     args = parser.parse_args()
 
-    relay = (args.relay, args.relay_port)
+    relay = (socket.gethostbyname(args.relay), args.relay_port)
     local = ("127.0.0.1", args.local_port)
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.settimeout(0.2)
