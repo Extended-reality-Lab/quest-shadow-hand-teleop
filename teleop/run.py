@@ -265,7 +265,9 @@ def main():
     parser.add_argument("--hand", choices=["right", "left"], default="right")
     parser.add_argument("--port", type=int, default=9000)
     parser.add_argument("--unity-port", type=int, default=DEFAULT_PORT, help="state stream to Unity; 0 = off")
-    parser.add_argument("--unity-host", default=DEFAULT_HOST)
+    parser.add_argument(
+        "--unity-host", default=DEFAULT_HOST, help="Unity's StateReceiver listens on 127.0.0.1 only, for now"
+    )
     args = parser.parse_args()
 
     model = build_scene(args.hand)
