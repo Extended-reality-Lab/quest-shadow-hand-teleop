@@ -46,6 +46,36 @@ window (Windows: Win+Shift+S) and put them side by side: the table, the red
 ball, the blue cube, the green can and the hand must match in size, place and
 orientation, and neither picture may be a mirror image of the other.
 
+## Live link: Unity follows MuJoCo
+
+`teleop/run.py` sends the simulation state to `127.0.0.1:9001` 60 times per
+second (`scene/state_stream.py`, format in `docs/integration/DATA.md`), and
+`StateReceiver` moves the hand and the objects to those poses.
+
+1. Select the `MuJoCo Scene` object, Add Component, `StateReceiver` (same
+   object as `ManifestLoader`).
+2. Terminal 1, the simulator (MuJoCo window opens):
+
+   ```
+   .\.venv\Scripts\python.exe teleop\run.py
+   ```
+
+3. Terminal 2, a synthetic hand instead of the headset:
+
+   ```
+   .\.venv\Scripts\python.exe pc_receiver\fake_sender.py
+   ```
+
+4. Press Play in Unity. The box in the top left corner shows `MuJoCo: seq N`
+   with N counting up, and the hand moves in Unity as in the MuJoCo window.
+   `MuJoCo: no data` means nothing arrives: check that terminal 1 runs.
+
+The fake hand is tracked for 3 s and lost for 2 s in a loop; while it is
+lost, the hand holds still in both windows. Stop with Ctrl+C in each terminal.
+
+If Unity shows a compile error in `StateReceiver.cs`, delete that file and the
+static scene works as before.
+
 ## After a scene change
 
 ```
@@ -61,6 +91,7 @@ Then press Play again, or use Rebuild in the ManifestLoader component menu.
   target, see-through in MuJoCo) is opaque.
 - Meshes are built when the scene loads and are not saved as assets, so use
   Play mode; an edit-mode Rebuild is lost when the scene is reopened.
-- The scene is static. The live state from the MuJoCo server comes next (#27, #29).
+- The live link applies the newest state as it arrives, without smoothing;
+  interpolation comes with #29. Grasp states are always `free` until #26.
 - Commit only `Assets/`, `Packages/` and `ProjectSettings/`; `.gitignore` here
   keeps the generated folders out.
