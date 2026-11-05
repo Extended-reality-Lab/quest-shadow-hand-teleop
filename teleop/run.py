@@ -8,7 +8,8 @@ pc_receiver/receiver.py), turns the hand into robot joint targets
     Windows:  .\\.venv\\Scripts\\python.exe teleop\\run.py
     Linux:    .venv/bin/python teleop/run.py
 
-Options: --hand left|right (default right), --port 9000.
+Options: --hand left|right (default right), --port 9000,
+--unity-port 9001 (simulation state for the Unity viewer; 0 = off), --unity-host 127.0.0.1.
 Keys in the viewer: Enter = re-centre (hold your hand forward over the table).
 
 Only one program can listen on a port: stop receiver.py before running this.
@@ -25,10 +26,16 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "pc_receiver"))
+sys.path.insert(0, os.path.join(HERE, "..", "scene"))
 
 import protocol
 from receiver import lan_ip
 from retarget import WRIST, Retargeter, build_hand_spec
+from state_stream import (  # pyright: ignore[reportMissingImports]
+    DEFAULT_HOST,
+    DEFAULT_PORT,
+    StatePublisher,
+)
 
 TABLE_TOP = 0.75  # m
 # Where the wrist goes after re-centring: above the near edge of the table.
@@ -257,6 +264,8 @@ def main():
     parser = argparse.ArgumentParser(description="Quest hand -> Shadow Hand in MuJoCo.")
     parser.add_argument("--hand", choices=["right", "left"], default="right")
     parser.add_argument("--port", type=int, default=9000)
+    parser.add_argument("--unity-port", type=int, default=DEFAULT_PORT, help="state stream to Unity; 0 = off")
+    parser.add_argument("--unity-host", default=DEFAULT_HOST)
     args = parser.parse_args()
 
     model = build_scene(args.hand)
@@ -266,6 +275,9 @@ def main():
     sock = open_socket(args.port)
     print(f"Listening on UDP port {args.port} for the {args.hand} hand. Enter in the viewer = re-centre.")
     print(f"Point the headset at {lan_ip()}:{args.port} (or leave the app on broadcast)")
+    publisher = StatePublisher(args.unity_host, args.unity_port) if args.unity_port else None
+    if publisher is not None:
+        print(f"Sending the simulation state to Unity at {args.unity_host}:{args.unity_port}")
 
     recenter_requested = False
 
@@ -294,11 +306,15 @@ def main():
             while data.time < now - start:
                 mujoco.mj_step(model, data)
             viewer.sync()
+            if publisher is not None:
+                publisher.publish(model, data)
 
             if now - last_print > 0.5:
                 last_print = now
                 print(f"\r{teleop.status(now):<45}", end="", flush=True)
             time.sleep(0.005)
+    if publisher is not None:
+        publisher.close()
     print()
 
 
