@@ -21,12 +21,17 @@ Windows:
 .\.venv\Scripts\python.exe teleop\run.py
 ```
 
-Options: `--hand left` (default `right`), `--port 9000`.
+Options: `--hand left` (default `right`), `--port 9000`, `--no-gesture`
+(re-centre by Enter only).
 
 The first tracked frame sets the starting point: hold your hand forward,
-palm down. To re-centre at any time, press **Enter** in the viewer, or pinch
-thumb and index finger of the other hand for one second (for when the headset
-is on and the keyboard is out of sight). The terminal shows `TRACKING` with
+palm down. To re-centre at any time, press **Enter** in the viewer, or hold
+the OK sign with the other hand for 1.5 s: thumb tip on index tip, the other
+three fingers straight (for when the headset is on and the keyboard is out of
+sight). Thumb on index alone does not count, because a resting hand does that
+too, and the scene would jump when nobody asked. The driving hand must be
+tracked at that moment; a sign made while it is out of view is dropped. The
+terminal shows `TRACKING` with
 the fit error, or `HOLD` when the hand is not tracked (the robot hand then
 keeps its last pose), and two rates: `hand` = messages of this hand per
 second, `loop` = turns of the main loop per second.
@@ -124,7 +129,7 @@ still press into the table, and contact stops them there.
 ### 5. Main loop (`main`)
 
 Each turn: read the newest datagram of each hand (the other hand only for the
-re-centre pinch, `PinchHold`), update the targets for the chosen hand,
+re-centre sign, `OkSign`), update the targets for the chosen hand,
 write them into `data`, step the physics until simulated time catches up with
 the wall clock (timestep 2 ms, at most 50 ms of catch-up per frame), sync the
 viewer. At start it prints the PC address to give the headset, like the
@@ -137,7 +142,7 @@ receiver.
 | `test_finds_a_robot_pose_again` | a skeleton taken from the robot itself in a random pose, then rotated, scaled 1.3x and moved, is matched within 4 mm mean point error (both hands) |
 | `test_short_straight_fingers_stay_straight` | the open robot skeleton with every finger shortened to 60 %: no joint bends more than 0.05 rad |
 | `test_fist_bends_the_fingers_more_than_open_hand` | fake hand closed vs open: index and middle flexion targets differ by more than 1 rad |
-| `PinchHoldTest` (4 tests) | a pinch held for 1 s asks for one re-centre; the hand must open before the next; a short pinch, a half-open hand, an untracked hand and a pinch across a silent stream do not count |
+| `OkSignTest` (5 tests) | the OK sign held for 1.5 s asks for one re-centre; the hand must open before the next; thumb on index with bent fingers (a resting hand), a short sign, a half-open hand, an untracked hand and a sign across a silent stream do not count |
 | `test_hand_follows_the_target_and_stays_in_limits` | 3 s of the fake hand: no NaN, every ctrl in range, forearm within 2 cm of the target |
 | `test_tracking_loss_holds_the_last_pose` | untracked messages leave the targets unchanged |
 | `test_hand_target_stays_in_the_workspace` | a hand 5 m below the floor keeps the target above the table |

@@ -61,8 +61,10 @@ Save the project to GitHub afterwards (`docs/integration/LAB-PC.md`).
 4. Hold the hand in front of you. The first tracked frame re-centres: the
    simulated wrist goes to its home position above the near edge of the table,
    and the scene moves so that this position is where your real wrist is. To
-   re-centre again, pinch thumb and index finger of the left hand for one
-   second, or press Enter in the MuJoCo viewer window. Re-centre with the
+   re-centre again, hold the OK sign with the left hand for 1.5 s (thumb tip
+   on index tip, the other three fingers straight), or press Enter in the
+   MuJoCo viewer window. Nothing else moves the scene: a resting left hand
+   does not, and with `--no-gesture` only Enter does. Re-centre with the
    right hand where it is comfortable and with free space in front of it: the
    table starts at the wrist and reaches 60 cm forward and 20 cm down, so a
    real desk there is in the way. The direction the fingers point becomes the
@@ -95,5 +97,5 @@ stops at the border and the two separate until the hand comes back.
 | Hands `TRACKED`, MuJoCo says `waiting for the hand` | teleop not running, or started with another `--port` |
 | Scene moves but the hand is not on your hand | the Godot project is open on the PC and also sends to port 9000; close it |
 | The image is fixed to the face | no state with a `stage` pose has arrived yet: start the teleop and hold the hand in view. Or the camera is not tagged `MainCamera` |
-| The table is to the side or behind you | the re-centre took a bad hand pose: hold the right hand forward and pinch the left hand for one second |
+| The table is to the side or behind you | the re-centre took a bad hand pose: hold the right hand forward and hold the OK sign with the left hand for 1.5 s |
 | No image in the headset | Link not started in the headset, or OpenXR runtime not set to Meta Horizon |

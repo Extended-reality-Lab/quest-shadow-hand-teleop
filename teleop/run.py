@@ -9,9 +9,11 @@ pc_receiver/receiver.py), turns the hand into robot joint targets
     Linux:    .venv/bin/python teleop/run.py
 
 Options: --hand left|right (default right), --port 9000,
---unity-port 9001 (simulation state for the Unity viewer; 0 = off), --unity-host 127.0.0.1.
+--unity-port 9001 (simulation state for the Unity viewer; 0 = off), --unity-host 127.0.0.1,
+--no-gesture (re-centre by Enter only).
 Re-centre (hold the hand forward, where it is comfortable): Enter in the viewer,
-or pinch thumb and index finger of the other hand for one second.
+or hold the OK sign with the other hand: thumb tip on index tip, the other
+three fingers straight.
 
 Only one program can listen on a port: stop receiver.py before running this.
 """
@@ -51,11 +53,17 @@ MAX_FRAME_GAP = 1 / 30  # s; after a long gap the speed limits still count one f
 MAX_CATCH_UP = 0.05  # s of simulation per drawn frame at most
 TIMEOUT = 0.5  # s without packets -> the hand holds still
 KEY_ENTER = 257  # GLFW key code
-# The other hand asks for a re-centre: thumb tip on index tip, held.
+# The other hand asks for a re-centre with the OK sign, held: thumb tip on
+# index tip, the other three fingers straight. Thumb on index alone is not
+# enough: a resting hand does that too, but with every finger bent.
 THUMB_TIP, INDEX_TIP = 5, 10  # OpenXR joint indices
+OTHER_FINGERS = ((11, 12, 13, 14, 15), (16, 17, 18, 19, 20), (21, 22, 23, 24, 25))  # metacarpal to tip
 PINCH_CLOSE = 0.02  # m between the tips: pinched
 PINCH_OPEN = 0.04  # m: released
-PINCH_HOLD = 1.0  # s
+STRAIGHT = 0.95  # straightness() of the three fingers: straight
+STRAIGHT_LOST = 0.90  # bent
+SIGN_HOLD = 1.5  # s
+SIGN_WINDOW = 0.3  # s after the sign in which the driving hand must be tracked
 
 # Quest (OpenXR: +Y up, -Z forward) -> MuJoCo world (+Z up). Same mapping as in
 # PROTOCOL.md: (x, y, z)_mujoco = (x, -z, y)_openxr.
@@ -127,15 +135,23 @@ def limit_rotation(current, target, max_angle):
     return q / np.linalg.norm(q)
 
 
-class PinchHold:
-    """Says True once when a hand has pinched for PINCH_HOLD seconds.
+def straightness(joints, chain):
+    """Distance from the base of a finger to its tip, over its length along
+    the bones: 1 for a straight finger, about 0.8 for a resting one."""
+    points = joints[list(chain)]
+    length = np.linalg.norm(np.diff(points, axis=0), axis=1).sum()
+    return np.linalg.norm(points[-1] - points[0]) / length if length > 1e-6 else 0.0
 
-    The hand must open again before the next one counts, so one long pinch is
-    one request. A hand that is not tracked, or silent, never counts.
+
+class OkSign:
+    """Says True once when a hand has held the OK sign for SIGN_HOLD seconds.
+
+    The sign must end before the next one counts, so one long sign is one
+    request. A hand that is not tracked, or silent, never counts.
     """
 
     def __init__(self):
-        self.since = None  # start of the current pinch
+        self.since = None  # start of the current sign
         self.last = None  # time of the last message
         self.fired = False
 
@@ -145,18 +161,21 @@ class PinchHold:
         if self.last is not None and now - self.last > TIMEOUT:
             self.since, self.fired = None, False  # the stream stopped: start again
         self.last = now
-        gap = None
+        made = kept = False
         if msg["tracked"]:
             joints = np.array(msg["joints"], dtype=float)[:, :3]
             gap = np.linalg.norm(joints[THUMB_TIP] - joints[INDEX_TIP])
-        if gap is None or gap > PINCH_OPEN:
+            straight = min(straightness(joints, chain) for chain in OTHER_FINGERS)
+            made = gap < PINCH_CLOSE and straight > STRAIGHT
+            kept = gap <= PINCH_OPEN and straight >= STRAIGHT_LOST
+        if not kept:
             self.since, self.fired = None, False
             return False
         if self.since is None:
-            if gap < PINCH_CLOSE:
+            if made:
                 self.since = now
             return False
-        if not self.fired and now - self.since >= PINCH_HOLD:
+        if not self.fired and now - self.since >= SIGN_HOLD:
             self.fired = True
             return True
         return False
@@ -321,6 +340,7 @@ def main():
     parser.add_argument(
         "--unity-host", default=DEFAULT_HOST, help="Unity's StateReceiver listens on 127.0.0.1 only, for now"
     )
+    parser.add_argument("--no-gesture", action="store_true", help="re-centre by Enter only, not by the OK sign")
     args = parser.parse_args()
 
     model = build_scene(args.hand)
@@ -329,15 +349,19 @@ def main():
     place_hand_at_home(model, data, teleop, args.hand)
     sock = open_socket(args.port)
     other_hand = "left" if args.hand == "right" else "right"
-    pinch = PinchHold()
+    sign = OkSign()
     print(f"Listening on UDP port {args.port} for the {args.hand} hand.")
-    print(f"Re-centre: Enter in the viewer, or pinch the {other_hand} hand for {PINCH_HOLD:.0f} s.")
+    if args.no_gesture:
+        print("Re-centre: Enter in the viewer.")
+    else:
+        print(f"Re-centre: Enter in the viewer, or the OK sign of the {other_hand} hand for {SIGN_HOLD} s.")
     print(f"Point the headset at {lan_ip()}:{args.port} (or leave the app on broadcast)")
     publisher = StatePublisher(args.unity_host, args.unity_port) if args.unity_port else None
     if publisher is not None:
         print(f"Sending the simulation state to Unity at {args.unity_host}:{args.unity_port}")
 
-    recenter_requested = False
+    recenter_requested = False  # by Enter: waits for the next tracked frame
+    sign_time = -SIGN_WINDOW  # by the OK sign: counts only while the driving hand is in view
 
     def on_key(key):
         nonlocal recenter_requested
@@ -355,11 +379,13 @@ def main():
             latest, count = read_latest(sock)
             loops += 1
             messages += count.get(args.hand, 0)
-            if pinch.update(latest.get(other_hand), now):
-                recenter_requested = True
+            if not args.no_gesture and sign.update(latest.get(other_hand), now):
+                sign_time = now
             msg = latest.get(args.hand)
-            if msg is not None and teleop.update(msg, now, recenter=recenter_requested):
+            recenter = recenter_requested or now - sign_time < SIGN_WINDOW
+            if msg is not None and teleop.update(msg, now, recenter=recenter):
                 recenter_requested = False
+                sign_time = now - SIGN_WINDOW
             teleop.apply(data)
 
             # Step the physics until simulated time catches up with the clock.

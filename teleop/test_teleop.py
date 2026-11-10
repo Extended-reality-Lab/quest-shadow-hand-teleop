@@ -20,9 +20,10 @@ from run import (
     MAX_FRAME_GAP,
     MAX_HAND_SPEED,
     MAX_HAND_TURN_SPEED,
-    PINCH_HOLD,
+    OTHER_FINGERS,
+    SIGN_HOLD,
     WORKSPACE_LOW,
-    PinchHold,
+    OkSign,
     Teleop,
     build_scene,
     place_hand_at_home,
@@ -106,42 +107,57 @@ class RetargetTest(unittest.TestCase):
         self.assertGreater(fist, open_hand + 1.0)
 
 
-class PinchHoldTest(unittest.TestCase):
-    def hand(self, gap, tracked=True):
+class OkSignTest(unittest.TestCase):
+    def hand(self, gap, tracked=True, curl=0.0):
+        """Thumb and index tips `gap` apart; the other fingers bend by `curl` rad at each joint."""
         joints = np.zeros((26, 3))
         joints[10] = [gap, 0.0, 0.0]  # index tip; the thumb tip stays at 0
+        for n, chain in enumerate(OTHER_FINGERS):
+            point = np.array([0.02 * (n + 1), 0.0, 0.0])
+            joints[chain[0]] = point
+            for k, length in enumerate((0.07, 0.045, 0.025, 0.022)):
+                point = point + length * np.array([0.0, np.cos(k * curl), -np.sin(k * curl)])
+                joints[chain[k + 1]] = point
         return message(joints, tracked=tracked, hand="left")
 
-    def feed(self, pinch, gap, start, seconds, tracked=True):
-        """Messages at 50 Hz; returns how many times the pinch fired."""
+    def feed(self, sign, gap, start, seconds, tracked=True, curl=0.0):
+        """Messages at 50 Hz; returns how many times the sign fired."""
         steps = round(seconds * 50)
-        return sum(pinch.update(self.hand(gap, tracked), start + i / 50) for i in range(steps + 1))
+        return sum(sign.update(self.hand(gap, tracked, curl), start + i / 50) for i in range(steps + 1))
 
-    def test_a_held_pinch_fires_once(self):
-        pinch = PinchHold()
-        self.assertEqual(self.feed(pinch, 0.01, 0.0, PINCH_HOLD - 0.1), 0)  # not long enough yet
-        self.assertEqual(self.feed(pinch, 0.01, PINCH_HOLD, 2.0), 1)  # one long pinch, one request
+    def test_a_held_sign_fires_once(self):
+        sign = OkSign()
+        self.assertEqual(self.feed(sign, 0.01, 0.0, SIGN_HOLD - 0.1), 0)  # not long enough yet
+        self.assertEqual(self.feed(sign, 0.01, SIGN_HOLD, 2.0), 1)  # one long sign, one request
 
-    def test_a_new_pinch_needs_an_open_hand_first(self):
-        pinch = PinchHold()
-        self.assertEqual(self.feed(pinch, 0.01, 0.0, 1.5), 1)
-        self.assertEqual(self.feed(pinch, 0.03, 2.0, 1.5), 0)  # half open: still the same pinch
-        self.assertEqual(self.feed(pinch, 0.08, 4.0, 0.2), 0)
-        self.assertEqual(self.feed(pinch, 0.01, 5.0, 1.5), 1)
+    def test_a_resting_hand_does_not_fire(self):
+        sign = OkSign()
+        self.assertEqual(self.feed(sign, 0.01, 0.0, 5.0, curl=0.6), 0)  # thumb on index, every finger bent
+        self.assertEqual(self.feed(sign, 0.01, 5.5, 5.0, curl=0.35), 0)  # 20 degrees at each joint is bent too
+        self.assertEqual(self.feed(sign, 0.01, 12.0, SIGN_HOLD - 0.5), 0)  # the sign starts
+        self.assertEqual(self.feed(sign, 0.01, 12.0 + SIGN_HOLD - 0.48, 1.0, curl=0.6), 0)  # the fingers bend: over
+        self.assertEqual(self.feed(sign, 0.01, 14.0 + SIGN_HOLD, SIGN_HOLD - 0.1), 0)  # and the count starts again
+
+    def test_a_new_sign_needs_an_open_hand_first(self):
+        sign = OkSign()
+        self.assertEqual(self.feed(sign, 0.01, 0.0, SIGN_HOLD + 0.5), 1)
+        self.assertEqual(self.feed(sign, 0.03, 3.0, SIGN_HOLD + 0.5), 0)  # half open: still the same sign
+        self.assertEqual(self.feed(sign, 0.08, 6.0, 0.2), 0)
+        self.assertEqual(self.feed(sign, 0.01, 7.0, SIGN_HOLD + 0.5), 1)
 
     def test_short_open_or_lost_hands_do_not_fire(self):
-        pinch = PinchHold()
-        self.assertEqual(self.feed(pinch, 0.01, 0.0, 0.5), 0)  # a short pinch
-        self.assertEqual(self.feed(pinch, 0.08, 1.0, 0.1), 0)
-        self.assertEqual(self.feed(pinch, 0.03, 2.0, 3.0), 0)  # never closed
-        self.assertEqual(self.feed(pinch, 0.01, 6.0, 3.0, tracked=False), 0)
-        self.assertFalse(pinch.update(None, 10.0))
+        sign = OkSign()
+        self.assertEqual(self.feed(sign, 0.01, 0.0, 0.5), 0)  # a short sign
+        self.assertEqual(self.feed(sign, 0.08, 1.0, 0.1), 0)
+        self.assertEqual(self.feed(sign, 0.03, 2.0, 3.0), 0)  # never closed
+        self.assertEqual(self.feed(sign, 0.01, 6.0, 3.0, tracked=False), 0)
+        self.assertFalse(sign.update(None, 10.0))
 
-    def test_a_pinch_does_not_continue_over_a_silent_stream(self):
-        pinch = PinchHold()
-        self.assertEqual(self.feed(pinch, 0.01, 0.0, 0.5), 0)
-        self.assertEqual(self.feed(pinch, 0.01, 30.0, 0.5), 0)  # 0.5 s again, not 30 s
-        self.assertEqual(self.feed(pinch, 0.01, 30.52, 0.6), 1)
+    def test_a_sign_does_not_continue_over_a_silent_stream(self):
+        sign = OkSign()
+        self.assertEqual(self.feed(sign, 0.01, 0.0, 0.5), 0)
+        self.assertEqual(self.feed(sign, 0.01, 30.0, SIGN_HOLD - 0.5), 0)  # counted from 30 s, not from 0
+        self.assertEqual(self.feed(sign, 0.01, 30.0 + SIGN_HOLD - 0.48, 0.6), 1)
 
 
 class TeleopTest(unittest.TestCase):
