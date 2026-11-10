@@ -5,7 +5,11 @@ MuJoCo is the authoritative frame: +Z up, right-handed, metres, quaternions
 
 Decision: every frame conversion happens in Python, on the MuJoCo side. The
 scene manifest and the state stream are written in Unity's frame, and Unity
-applies the values as they are, with no math of its own.
+applies the values as they are, with no math of its own. One exception:
+unity_viz/Assets/Scripts/HandSender.cs turns the hand poses it reads back into
+the OpenXR frame before sending them, because teleop/run.py expects the
+headset's own frame. This module stays numpy-only (no mujoco import), so it
+has its own matrix-to-quaternion function.
 
     position:    (x, y, z)_unity = (x, z, y)_mujoco
     quaternion:  (x, y, z, w)_unity = (-x, -z, -y, w)_mujoco

@@ -143,6 +143,7 @@ class Teleop:
 
         self.origin = None  # Quest wrist position at the last re-centre
         self.yaw = np.eye(3)  # turns the user's forward direction into +Y
+        self.stage = None  # (rotation, translation) of the stage frame, set by recenter()
         self.ctrl = None
         self.mocap_pos = None
         self.mocap_quat = None
@@ -156,14 +157,13 @@ class Teleop:
         heading = np.arctan2(forward[0], forward[1])  # angle from +Y, about +Z
         c, s = np.cos(heading), np.sin(heading)
         self.yaw = np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
+        rotation = self.yaw @ QUEST_TO_WORLD
+        self.stage = (rotation, HOME - rotation @ self.origin)
 
     def stage_transform(self):
         """Rotation and translation that map the headset's stage frame into the
         world, as update() applies them to the wrist; None before the first re-centre."""
-        if self.origin is None:
-            return None
-        rotation = self.yaw @ QUEST_TO_WORLD
-        return rotation, HOME - rotation @ self.origin
+        return self.stage
 
     def forearm_pose(self, palm_rot, palm_pos):
         """Forearm (mocap) position and quaternion that put the palm at this pose."""

@@ -129,11 +129,15 @@ public class StateReceiver : MonoBehaviour
         shownSeq = state.seq;
         Apply(state.bodies);
         Apply(state.objects);
-        if (xrRig != null)
+        if (xrRig != null && state.stage != null && state.stage.p != null && state.stage.p.Length == 3
+            && state.stage.q != null && state.stage.q.Length == 4)
         {
-            // Absent until the teleop has re-centred; then the headset's
-            // tracking origin, in the same world frame as the bodies.
-            SetPose(xrRig, state.stage);
+            // Absent until the teleop has re-centred; then the headset's tracking
+            // origin, in the frame of this object like the bodies, wherever the rig
+            // itself is parented.
+            Vector3 p = new Vector3(state.stage.p[0], state.stage.p[1], state.stage.p[2]);
+            Quaternion q = new Quaternion(state.stage.q[0], state.stage.q[1], state.stage.q[2], state.stage.q[3]);
+            xrRig.SetPositionAndRotation(transform.TransformPoint(p), transform.rotation * q);
         }
     }
 

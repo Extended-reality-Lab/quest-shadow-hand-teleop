@@ -29,7 +29,8 @@ per PC).
 2. **Headset:** Settings → Movement tracking → *Hand tracking*: on.
 3. **Unity:** open `unity_viz`. The package manager installs XR Plug-in
    Management 4.5.4, OpenXR Plugin 1.14.0 and XR Hands 1.5.1 from
-   `Packages/manifest.json`. If Unity asks to enable the new Input System
+   `Packages/manifest.json` and rewrites `Packages/packages-lock.json`; commit
+   that file with the scene. If Unity asks to enable the new Input System
    backend, answer Yes (the editor restarts).
 4. **Edit → Project Settings → XR Plug-in Management**, Windows tab: tick
    *OpenXR*. In the *OpenXR* page that appears below: under *Interaction
@@ -38,8 +39,9 @@ per PC).
    warning icon) still lists.
 5. **Scene:** create an empty GameObject `XR Rig` at the origin and drag
    `Main Camera` inside it (camera local position 0, 0, 0). Select the `MuJoCo`
-   object: in *State Receiver* set *Xr Rig* to `XR Rig`; *Add Component* →
-   *Hand Sender* (host 127.0.0.1, port 9000). `Ctrl+S`.
+   object: in *Manifest Loader* untick *Set Camera* (the headset drives the
+   camera now); in *State Receiver* set *Xr Rig* to `XR Rig`; *Add Component*
+   → *Hand Sender* (host 127.0.0.1, port 9000). `Ctrl+S`.
 6. **Edit → Project Settings → Player → Resolution and Presentation:** *Run In
    Background* on, so Unity keeps rendering when the terminal has the focus.
 

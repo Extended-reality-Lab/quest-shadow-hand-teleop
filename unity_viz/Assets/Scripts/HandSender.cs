@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using UnityEngine;
+using UnityEngine.XR;
 using UnityEngine.XR.Hands;
 
 // Sends the tracked hands to MuJoCo in the hand stream format v1
@@ -15,7 +16,8 @@ using UnityEngine.XR.Hands;
 // Needs the XR Hands package and the OpenXR feature "Hand Tracking Subsystem"
 // (docs/integration/HEADSET.md). Poses come in Unity's tracking space
 // (left-handed, Z negated); they go out in the OpenXR stage frame, as the
-// Quest app reports them.
+// Quest app reports them. This is the one frame conversion outside Python
+// (scene/frames.py): the receiver expects the headset's own frame.
 public class HandSender : MonoBehaviour
 {
     [Tooltip("Address of teleop/run.py (--port 9000).")]
@@ -42,6 +44,7 @@ public class HandSender : MonoBehaviour
     UdpClient client;
     IPEndPoint target;
     long seq;
+    bool sendFailed;
     readonly StringBuilder json = new StringBuilder(4096);
     readonly StringBuilder joints = new StringBuilder(4096);
     string status = "hands: no XR hand subsystem";
@@ -111,16 +114,24 @@ public class HandSender : MonoBehaviour
         {
             return;
         }
-        bool left = Send("left", sender.leftHand);
-        bool right = Send("right", sender.rightHand);
-        status = "hands -> " + host + ":" + port + "  left " + (left ? "TRACKED" : "LOST")
-            + "  right " + (right ? "TRACKED" : "LOST");
+        string left = Send("left", sender.leftHand, XRNode.LeftHand);
+        string right = Send("right", sender.rightHand, XRNode.RightHand);
+        status = "hands -> " + host + ":" + port + "  left " + left + "  right " + right
+            + (sendFailed ? "  (send failed: is teleop running?)" : "");
     }
 
-    // One datagram for this hand. Returns whether it was sent as tracked.
-    bool Send(string hand, XRHand data)
+    // One datagram for this hand. Returns the status word for the screen.
+    string Send(string hand, XRHand data, XRNode node)
     {
+        // A hand pose made up from a held controller is not a real hand: report
+        // it as lost, as the Quest app does, so the robot does not follow it.
+        string source = "unknown";  // XR Hands does not say optical or controller
         bool tracked = data.isTracked;
+        if (tracked && ControllerHeld(node))
+        {
+            source = "controller";
+            tracked = false;
+        }
         joints.Clear();
         if (tracked)
         {
@@ -142,20 +153,30 @@ public class HandSender : MonoBehaviour
         json.Append(",\"t_us\":").Append((long)(Time.realtimeSinceStartupAsDouble * 1e6));
         json.Append(",\"hand\":\"").Append(hand).Append('"');
         json.Append(",\"tracked\":").Append(tracked ? "true" : "false");
-        json.Append(",\"source\":\"unknown\"");  // XR Hands does not say optical or controller
+        json.Append(",\"source\":\"").Append(source).Append('"');
         json.Append(",\"joints\":[").Append(joints).Append("]}");
 
         byte[] bytes = Encoding.UTF8.GetBytes(json.ToString());
         try
         {
             client.Send(bytes, bytes.Length, target);
+            sendFailed = false;
+            seq++;
         }
         catch (SocketException)
         {
-            return false;  // the receiver is not there yet; the next frame tries again
+            sendFailed = true;  // nobody listens yet; the next frame tries again
         }
-        seq++;
-        return tracked;
+        return tracked ? "TRACKED" : "LOST (" + source + ")";
+    }
+
+    static bool ControllerHeld(XRNode node)
+    {
+        InputDevice device = InputDevices.GetDeviceAtXRNode(node);
+        bool tracked;
+        return device.isValid
+            && (device.characteristics & InputDeviceCharacteristics.Controller) != 0
+            && device.TryGetFeatureValue(CommonUsages.isTracked, out tracked) && tracked;
     }
 
     // Unity tracking space (left-handed) -> OpenXR stage frame (right-handed):
@@ -189,6 +210,6 @@ public class HandSender : MonoBehaviour
 
     void OnGUI()
     {
-        GUI.Box(new Rect(10, 40, 420, 24), status);
+        GUI.Box(new Rect(10, 40, 520, 24), status);
     }
 }
