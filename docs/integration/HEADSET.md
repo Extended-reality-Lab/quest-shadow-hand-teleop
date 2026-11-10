@@ -38,7 +38,9 @@ per PC).
    Groups* tick *Hand Tracking Subsystem*. Fix anything the validator (the
    warning icon) still lists.
 5. **Scene:** create an empty GameObject `XR Rig` at the origin and drag
-   `Main Camera` inside it (camera local position 0, 0, 0). Select the
+   `Main Camera` onto it, so the camera is its child (camera local position
+   0, 0, 0; *Clipping Planes → Near* 0.05). On `Main Camera`: *Add Component*
+   → *Head Tracker*, which moves the camera with the headset. Select the
    `MuJoCo Scene` object (`unity_viz/README.md` creates it, with *Manifest
    Loader* and *State Receiver*): set *Xr Rig* to `XR Rig`; *Add Component* →
    *Hand Sender* (host 127.0.0.1, port 9000). `Ctrl+S`. (`ManifestLoader`
@@ -86,4 +88,5 @@ stops at the border and the two separate until the hand comes back.
 | Both hands `LOST` | Hand tracking off in the headset, or the controllers are held: put them down |
 | Hands `TRACKED`, MuJoCo says `waiting for the hand` | teleop not running, or started with another `--port` |
 | Scene moves but the hand is not on your hand | the Godot project is open on the PC and also sends to port 9000; close it |
+| The image is fixed to the face, or shows only the side of the table | `Main Camera` is not a child of `XR Rig`, has no *Head Tracker*, or *Xr Rig* is empty in *State Receiver* |
 | No image in the headset | Link not started in the headset, or OpenXR runtime not set to Meta Horizon |
