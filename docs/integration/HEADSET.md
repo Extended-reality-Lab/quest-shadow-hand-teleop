@@ -38,8 +38,9 @@ per PC).
    Groups* tick *Hand Tracking Subsystem*. Fix anything the validator (the
    warning icon) still lists.
 5. **Scene:** create an empty GameObject `XR Rig` at the origin and drag
-   `Main Camera` inside it (camera local position 0, 0, 0). Select the `MuJoCo`
-   object: in *State Receiver* set *Xr Rig* to `XR Rig`; *Add Component* →
+   `Main Camera` inside it (camera local position 0, 0, 0). Select the
+   `MuJoCo Scene` object (`unity_viz/README.md` creates it, with *Manifest
+   Loader* and *State Receiver*): set *Xr Rig* to `XR Rig`; *Add Component* →
    *Hand Sender* (host 127.0.0.1, port 9000). `Ctrl+S`. (`ManifestLoader`
    leaves a camera alone once it sits under a rig.)
 6. **Edit → Project Settings → Player → Resolution and Presentation:** *Run In
