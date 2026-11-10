@@ -143,7 +143,8 @@ class Teleop:
 
         self.origin = None  # Quest wrist position at the last re-centre
         self.yaw = np.eye(3)  # turns the user's forward direction into +Y
-        self.stage = None  # (rotation, translation) of the stage frame, set by recenter()
+        # (rotation, translation): stage frame -> world, set by recenter()
+        self.stage: tuple[np.ndarray, np.ndarray] | None = None
         self.ctrl = None
         self.mocap_pos = None
         self.mocap_quat = None
@@ -181,16 +182,18 @@ class Teleop:
         try:
             ctrl, self.error = self.retarget.solve(joints)
             human = self.retarget.human_frame(joints)
-            if self.origin is None or recenter:
+            if self.stage is None or recenter:
                 self.recenter(joints)
         except ValueError:
             return False  # a broken frame (points on top of each other): skip it
 
         # Palm pose in the world: human palm axes, turned into world axes,
-        # matched to the robot's palm axes.
-        to_world = self.yaw @ QUEST_TO_WORLD
+        # matched to the robot's palm axes. The same stage transform goes to
+        # Unity, which places the headset's tracking origin with it.
+        assert self.stage is not None  # recenter() ran above or earlier
+        to_world, translation = self.stage
         palm_rot = to_world @ human @ self.retarget.robot_frame.T
-        palm_pos = HOME + to_world @ (joints[WRIST] - self.origin)
+        palm_pos = to_world @ joints[WRIST] + translation
         forearm_pos, quat = self.forearm_pose(palm_rot, palm_pos)
 
         # Safety filter: workspace box, speed limits on position, rotation and

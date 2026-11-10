@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using UnityEngine;
 using UnityEngine.Rendering;
-using UnityEngine.XR;
 
 // Builds the MuJoCo scene from scene/scene_manifest.json (written by
 // scene/export_manifest.py). Visual only: no Rigidbody, no Collider.
@@ -63,8 +62,9 @@ public class ManifestLoader : MonoBehaviour
             }
         }
 
-        // With a headset the camera follows the head; the XR rig places it (StateReceiver.xrRig).
-        if (setCamera && !XRSettings.isDeviceActive)
+        // A camera under a rig (the XR rig, StateReceiver.xrRig) follows the
+        // headset; only a free camera is moved to the viewer's first view.
+        if (setCamera && (Camera.main == null || Camera.main.transform.parent == null))
         {
             SetCamera(manifest.camera);
         }

@@ -24,6 +24,10 @@ public class HandSender : MonoBehaviour
     public string host = "127.0.0.1";
     public int port = 9000;
 
+    // A hand pose made up from a held controller sits on the controller. A real
+    // hand holding nothing is further away than this from any tracked controller.
+    const float HeldDistance = 0.15f;  // m
+
     // OpenXR XR_EXT_hand_tracking joint order, the same as JOINT_NAMES in
     // pc_receiver/protocol.py. By name: XRHandJointID numbers differ.
     static readonly XRHandJointID[] Order =
@@ -48,6 +52,8 @@ public class HandSender : MonoBehaviour
     readonly StringBuilder json = new StringBuilder(4096);
     readonly StringBuilder joints = new StringBuilder(4096);
     string status = "hands: no XR hand subsystem";
+    string leftWord, rightWord;
+    bool shownSendFailed;
     float nextSearch;
 
     void OnEnable()
@@ -114,20 +120,30 @@ public class HandSender : MonoBehaviour
         {
             return;
         }
+        sendFailed = false;  // set by either Send of this frame
         string left = Send("left", sender.leftHand, XRNode.LeftHand);
         string right = Send("right", sender.rightHand, XRNode.RightHand);
-        status = "hands -> " + host + ":" + port + "  left " + left + "  right " + right
-            + (sendFailed ? "  (send failed: is teleop running?)" : "");
+        if (!ReferenceEquals(left, leftWord) || !ReferenceEquals(right, rightWord) || sendFailed != shownSendFailed)
+        {
+            leftWord = left;
+            rightWord = right;
+            shownSendFailed = sendFailed;
+            status = "hands -> " + host + ":" + port + "  left " + left + "  right " + right
+                + (sendFailed ? "  (send failed: is teleop running?)" : "");
+        }
     }
 
-    // One datagram for this hand. Returns the status word for the screen.
+    // One datagram for this hand. Returns the status word for the screen (a
+    // constant string, so callers can compare by reference).
     string Send(string hand, XRHand data, XRNode node)
     {
-        // A hand pose made up from a held controller is not a real hand: report
-        // it as lost, as the Quest app does, so the robot does not follow it.
-        string source = "unknown";  // XR Hands does not say optical or controller
+        // XR Hands does not report the data source. A hand that sits on a
+        // tracked controller is taken as made up from that controller and
+        // reported as lost, as the Quest app does, so the robot never follows it.
+        string source = "unknown";
         bool tracked = data.isTracked;
-        if (tracked && ControllerHeld(node))
+        Pose wrist;
+        if (tracked && data.GetJoint(XRHandJointID.Wrist).TryGetPose(out wrist) && ControllerAt(node, wrist.position))
         {
             source = "controller";
             tracked = false;
@@ -160,23 +176,26 @@ public class HandSender : MonoBehaviour
         try
         {
             client.Send(bytes, bytes.Length, target);
-            sendFailed = false;
             seq++;
         }
         catch (SocketException)
         {
             sendFailed = true;  // nobody listens yet; the next frame tries again
         }
-        return tracked ? "TRACKED" : "LOST (" + source + ")";
+        return tracked ? "TRACKED" : source == "controller" ? "LOST (controller)" : "LOST";
     }
 
-    static bool ControllerHeld(XRNode node)
+    // True when a tracked controller for this hand is within HeldDistance of the wrist.
+    static bool ControllerAt(XRNode node, Vector3 wrist)
     {
         InputDevice device = InputDevices.GetDeviceAtXRNode(node);
         bool tracked;
+        Vector3 position;
         return device.isValid
             && (device.characteristics & InputDeviceCharacteristics.Controller) != 0
-            && device.TryGetFeatureValue(CommonUsages.isTracked, out tracked) && tracked;
+            && device.TryGetFeatureValue(CommonUsages.isTracked, out tracked) && tracked
+            && device.TryGetFeatureValue(CommonUsages.devicePosition, out position)
+            && (position - wrist).magnitude < HeldDistance;
     }
 
     // Unity tracking space (left-handed) -> OpenXR stage frame (right-handed):

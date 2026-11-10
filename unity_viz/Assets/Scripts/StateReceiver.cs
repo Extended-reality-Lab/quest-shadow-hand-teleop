@@ -129,15 +129,13 @@ public class StateReceiver : MonoBehaviour
         shownSeq = state.seq;
         Apply(state.bodies);
         Apply(state.objects);
-        if (xrRig != null && state.stage != null && state.stage.p != null && state.stage.p.Length == 3
-            && state.stage.q != null && state.stage.q.Length == 4)
+        if (xrRig != null && Complete(state.stage))
         {
             // Absent until the teleop has re-centred; then the headset's tracking
             // origin, in the frame of this object like the bodies, wherever the rig
             // itself is parented.
-            Vector3 p = new Vector3(state.stage.p[0], state.stage.p[1], state.stage.p[2]);
-            Quaternion q = new Quaternion(state.stage.q[0], state.stage.q[1], state.stage.q[2], state.stage.q[3]);
-            xrRig.SetPositionAndRotation(transform.TransformPoint(p), transform.rotation * q);
+            xrRig.SetPositionAndRotation(transform.TransformPoint(Position(state.stage)),
+                transform.rotation * Rotation(state.stage));
         }
     }
 
@@ -149,22 +147,28 @@ public class StateReceiver : MonoBehaviour
         }
         foreach (MujocoPose pose in poses)
         {
-            if (pose != null)
+            Transform part = Complete(pose) ? FindPart(pose.id) : null;
+            if (part != null)
             {
-                SetPose(FindPart(pose.id), pose);
+                part.localPosition = Position(pose);
+                part.localRotation = Rotation(pose);
             }
         }
     }
 
-    // Applies p and q as the local pose, when both are complete and the target exists.
-    static void SetPose(Transform target, MujocoPose pose)
+    static bool Complete(MujocoPose pose)
     {
-        if (target == null || pose == null || pose.p == null || pose.p.Length != 3 || pose.q == null || pose.q.Length != 4)
-        {
-            return;
-        }
-        target.localPosition = new Vector3(pose.p[0], pose.p[1], pose.p[2]);
-        target.localRotation = new Quaternion(pose.q[0], pose.q[1], pose.q[2], pose.q[3]);
+        return pose != null && pose.p != null && pose.p.Length == 3 && pose.q != null && pose.q.Length == 4;
+    }
+
+    static Vector3 Position(MujocoPose pose)
+    {
+        return new Vector3(pose.p[0], pose.p[1], pose.p[2]);
+    }
+
+    static Quaternion Rotation(MujocoPose pose)
+    {
+        return new Quaternion(pose.q[0], pose.q[1], pose.q[2], pose.q[3]);
     }
 
     // The child that ManifestLoader built for this body id; looked up again
