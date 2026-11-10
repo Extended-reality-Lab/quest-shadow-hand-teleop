@@ -15,8 +15,11 @@ public class StateReceiver : MonoBehaviour
     [Tooltip("UDP port of the MuJoCo state stream (teleop/run.py --unity-port).")]
     public int port = 9001;
 
-    [Tooltip("Parent of the XR camera. Moved to the headset's tracking origin (the 'stage' pose), so the rendered hand is on the real hand. Leave empty without a headset.")]
+    [Tooltip("Parent of the XR camera. Moved to the headset's tracking origin (the 'stage' pose), so the rendered hand is on the real hand. Can stay empty: with a headset, Play puts Main Camera under a rig by itself.")]
     public Transform xrRig;
+
+    bool cameraAttached;  // Main Camera sits under xrRig and follows the headset
+    float nextAttach;
 
     readonly object stateLock = new object();
     byte[] latest;      // newest datagram, written by the receive thread, under stateLock
@@ -129,11 +132,21 @@ public class StateReceiver : MonoBehaviour
         shownSeq = state.seq;
         Apply(state.bodies);
         Apply(state.objects);
-        if (xrRig != null && Complete(state.stage))
+        if (!Complete(state.stage))
         {
-            // Absent until the teleop has re-centred; then the headset's tracking
-            // origin, in the frame of this object like the bodies, wherever the rig
-            // itself is parented.
+            return;  // absent until the teleop has re-centred
+        }
+        if (!cameraAttached && Time.unscaledTime >= nextAttach)
+        {
+            // With a headset, the camera goes under the rig and follows the head.
+            // Without one this stays false and the fixed view remains.
+            nextAttach = Time.unscaledTime + 1f;
+            cameraAttached = HeadTracker.Attach(ref xrRig);
+        }
+        if (xrRig != null)
+        {
+            // The headset's tracking origin, in the frame of this object like the
+            // bodies, wherever the rig itself is parented.
             xrRig.SetPositionAndRotation(transform.TransformPoint(Position(state.stage)),
                 transform.rotation * Rotation(state.stage));
         }

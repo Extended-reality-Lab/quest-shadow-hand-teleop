@@ -4,14 +4,46 @@ using UnityEngine.XR;
 
 // Moves the camera with the headset. Unity's XR plug-ins render from the
 // camera's transform and do not move it themselves, so without this the image
-// stays fixed to the face. Add it to the camera that sits under the XR rig.
-// It sets the local pose, so the rig (StateReceiver.xrRig) still places the
-// tracking space in the scene. Without a headset it does nothing.
+// stays fixed to the face. It belongs on the camera that sits under the XR
+// rig; StateReceiver puts it there with Attach(). It sets the local pose, so
+// the rig (StateReceiver.xrRig) still places the tracking space in the scene.
+// Without a headset it does nothing.
 public class HeadTracker : MonoBehaviour
 {
+    static readonly List<InputDevice> headsets = new List<InputDevice>();
+
     readonly List<InputDevice> found = new List<InputDevice>();
     InputDevice head;
     float nextSearch;
+
+    // Sets the scene up for a headset: Camera.main goes under `rig` and gets a
+    // HeadTracker. With no `rig` given, the camera's parent is the rig, or a
+    // new "XR Rig" object when the camera has none. Returns false, and changes
+    // nothing, while there is no headset or no camera: the camera then keeps
+    // the fixed view of ManifestLoader, and the caller can try again later.
+    public static bool Attach(ref Transform rig)
+    {
+        Camera cam = Camera.main;
+        InputDevices.GetDevicesWithCharacteristics(InputDeviceCharacteristics.HeadMounted, headsets);
+        if (cam == null || headsets.Count == 0)
+        {
+            return false;
+        }
+        if (rig == null)
+        {
+            rig = cam.transform.parent != null ? cam.transform.parent : new GameObject("XR Rig").transform;
+        }
+        if (!cam.transform.IsChildOf(rig))
+        {
+            cam.transform.SetParent(rig, false);
+        }
+        if (cam.GetComponent<HeadTracker>() == null)
+        {
+            cam.gameObject.AddComponent<HeadTracker>();
+        }
+        cam.nearClipPlane = Mathf.Min(cam.nearClipPlane, 0.05f);
+        return true;
+    }
 
     void OnEnable()
     {

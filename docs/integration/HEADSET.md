@@ -37,14 +37,15 @@ per PC).
    Profiles* add *Oculus Touch Controller Profile*; under *OpenXR Feature
    Groups* tick *Hand Tracking Subsystem*. Fix anything the validator (the
    warning icon) still lists.
-5. **Scene:** create an empty GameObject `XR Rig` at the origin and drag
-   `Main Camera` onto it, so the camera is its child (camera local position
-   0, 0, 0; *Clipping Planes → Near* 0.05). On `Main Camera`: *Add Component*
-   → *Head Tracker*, which moves the camera with the headset. Select the
-   `MuJoCo Scene` object (`unity_viz/README.md` creates it, with *Manifest
-   Loader* and *State Receiver*): set *Xr Rig* to `XR Rig`; *Add Component* →
-   *Hand Sender* (host 127.0.0.1, port 9000). `Ctrl+S`. (`ManifestLoader`
-   leaves a camera alone once it sits under a rig.)
+5. **Scene:** select the `MuJoCo Scene` object (`unity_viz/README.md` creates
+   it, with *Manifest Loader* and *State Receiver*): *Add Component* → *Hand
+   Sender* (host 127.0.0.1, port 9000). `Ctrl+S`. The camera needs no setup:
+   at Play, when a headset is connected and the teleop has re-centred, *State
+   Receiver* puts `Main Camera` under an `XR Rig` object (the one in its *Xr
+   Rig* field, the camera's parent, or a new one) and adds *Head Tracker*,
+   which moves the camera with the head. The table then stays in place when
+   you look around. Without a headset the camera keeps the fixed view from the
+   manifest.
 6. **Edit → Project Settings → Player → Resolution and Presentation:** *Run In
    Background* on, so Unity keeps rendering when the terminal has the focus.
 
@@ -93,5 +94,6 @@ stops at the border and the two separate until the hand comes back.
 | Both hands `LOST` | Hand tracking off in the headset, or the controllers are held: put them down |
 | Hands `TRACKED`, MuJoCo says `waiting for the hand` | teleop not running, or started with another `--port` |
 | Scene moves but the hand is not on your hand | the Godot project is open on the PC and also sends to port 9000; close it |
-| The image is fixed to the face, or shows only the side of the table | `Main Camera` is not a child of `XR Rig`, has no *Head Tracker*, or *Xr Rig* is empty in *State Receiver* |
+| The image is fixed to the face | no state with a `stage` pose has arrived yet: start the teleop and hold the hand in view. Or the camera is not tagged `MainCamera` |
+| The table is to the side or behind you | the re-centre took a bad hand pose: hold the right hand forward and pinch the left hand for one second |
 | No image in the headset | Link not started in the headset, or OpenXR runtime not set to Meta Horizon |
