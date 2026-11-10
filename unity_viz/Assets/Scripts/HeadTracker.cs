@@ -16,9 +16,9 @@ public class HeadTracker : MonoBehaviour
     InputDevice head;
     float nextSearch;
 
-    // Sets the scene up for a headset: Camera.main goes under `rig` and gets a
-    // HeadTracker. With no `rig` given, the camera's parent is the rig, or a
-    // new "XR Rig" object when the camera has none. Returns false, and changes
+    // Sets the scene up for a headset: Camera.main becomes a direct child of
+    // `rig` and gets a HeadTracker. With no `rig` given, a new "XR Rig" object
+    // is the rig, so no other object of the scene moves. Returns false, and changes
     // nothing, while there is no headset or no camera: the camera then keeps
     // the fixed view of ManifestLoader, and the caller can try again later.
     public static bool Attach(ref Transform rig)
@@ -29,11 +29,11 @@ public class HeadTracker : MonoBehaviour
         {
             return false;
         }
-        if (rig == null)
+        if (rig == null || rig == cam.transform)
         {
-            rig = cam.transform.parent != null ? cam.transform.parent : new GameObject("XR Rig").transform;
+            rig = new GameObject("XR Rig").transform;
         }
-        if (!cam.transform.IsChildOf(rig))
+        if (cam.transform.parent != rig)
         {
             cam.transform.SetParent(rig, false);
         }

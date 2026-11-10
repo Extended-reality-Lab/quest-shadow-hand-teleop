@@ -42,7 +42,7 @@ per PC).
    Sender* (host 127.0.0.1, port 9000). `Ctrl+S`. The camera needs no setup:
    at Play, when a headset is connected and the teleop has re-centred, *State
    Receiver* puts `Main Camera` under an `XR Rig` object (the one in its *Xr
-   Rig* field, the camera's parent, or a new one) and adds *Head Tracker*,
+   Rig* field, or a new one) and adds *Head Tracker*,
    which moves the camera with the head. The table then stays in place when
    you look around. Without a headset the camera keeps the fixed view from the
    manifest.
