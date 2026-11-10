@@ -73,6 +73,19 @@ Save the project to GitHub afterwards (`docs/integration/LAB-PC.md`).
 The two status boxes in Unity say what works: `MuJoCo: seq N` (state stream
 arriving) and `hands -> 127.0.0.1:9000  left LOST  right TRACKED`.
 
+## Recording a video
+
+Over Link the PC renders the image, so the PC records it. In a terminal in
+the repository root, after Link and Unity *Play* are running:
+
+```
+.\mirror
+```
+
+`mirror.bat` opens Oculus Mirror, a desktop window with the exact view of the
+headset. Record that window with the Snipping Tool (`Win+Shift+R`) or the
+Xbox Game Bar (`Win+Alt+R`).
+
 ## How the alignment works
 
 `teleop/run.py` maps the headset's tracked wrist into the MuJoCo world with a

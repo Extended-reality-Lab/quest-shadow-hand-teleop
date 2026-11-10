@@ -1,3 +1,4 @@
 # Keep line endings correct for each OS regardless of the machine that commits.
 *.sh  text eol=lf
 *.ps1 text eol=crlf
+*.bat text eol=crlf
