@@ -15,12 +15,14 @@ sys.path.insert(0, os.path.join(HERE, "..", "pc_receiver"))
 
 import fake_sender
 import protocol
-from retarget import TARGETS, WRIST, Retargeter
+from retarget import CHAINS, WRIST, Retargeter
 from run import (
     MAX_FRAME_GAP,
     MAX_HAND_SPEED,
     MAX_HAND_TURN_SPEED,
+    PINCH_HOLD,
     WORKSPACE_LOW,
+    PinchHold,
     Teleop,
     build_scene,
     place_hand_at_home,
@@ -39,12 +41,10 @@ def robot_skeleton(retargeter, qpos):
     p = retargeter.prefix
     joints = np.zeros((26, 3))
     joints[WRIST] = d.body(p + "palm").xpos
-    joints[7] = d.body(p + "ffproximal").xpos
-    joints[12] = d.body(p + "mfproximal").xpos
-    joints[22] = d.body(p + "lfproximal").xpos
-    for index, name, _ in TARGETS:
-        obj = d.site(p + name) if name.endswith("_tip") else d.body(p + name)
-        joints[index] = obj.xpos
+    for human, robot in CHAINS:
+        for index, name in zip(human, robot):
+            obj = d.site(p + name) if name.endswith("_tip") else d.body(p + name)
+            joints[index] = obj.xpos
     return joints
 
 
@@ -79,6 +79,18 @@ class RetargetTest(unittest.TestCase):
                 _, error = r.solve(joints)
             self.assertLess(error, 0.004, hand)  # mean point error under 4 mm
 
+    def test_short_straight_fingers_stay_straight(self):
+        # A human hand has shorter fingers for its palm than the Shadow Hand.
+        r = Retargeter("right")
+        joints = robot_skeleton(r, np.zeros(r.model.nq))  # the open robot hand
+        for human, _ in CHAINS:
+            base = joints[human[0]].copy()
+            for index in human[1:]:
+                joints[index] = base + 0.6 * (joints[index] - base)
+        for _ in range(20):
+            r.solve(joints)
+        self.assertLess(np.abs(r.data.qpos).max(), 0.05)  # rad: no joint bends
+
     def test_fist_bends_the_fingers_more_than_open_hand(self):
         r = Retargeter("right")
         names = ["rh_A_FFJ3", "rh_A_FFJ0", "rh_A_MFJ3", "rh_A_MFJ0"]
@@ -92,6 +104,44 @@ class RetargetTest(unittest.TestCase):
 
         open_hand, fist = bend(0.0), bend(1.5)  # fake curl: 0 at t=0, 1 at t=1.5
         self.assertGreater(fist, open_hand + 1.0)
+
+
+class PinchHoldTest(unittest.TestCase):
+    def hand(self, gap, tracked=True):
+        joints = np.zeros((26, 3))
+        joints[10] = [gap, 0.0, 0.0]  # index tip; the thumb tip stays at 0
+        return message(joints, tracked=tracked, hand="left")
+
+    def feed(self, pinch, gap, start, seconds, tracked=True):
+        """Messages at 50 Hz; returns how many times the pinch fired."""
+        steps = round(seconds * 50)
+        return sum(pinch.update(self.hand(gap, tracked), start + i / 50) for i in range(steps + 1))
+
+    def test_a_held_pinch_fires_once(self):
+        pinch = PinchHold()
+        self.assertEqual(self.feed(pinch, 0.01, 0.0, PINCH_HOLD - 0.1), 0)  # not long enough yet
+        self.assertEqual(self.feed(pinch, 0.01, PINCH_HOLD, 2.0), 1)  # one long pinch, one request
+
+    def test_a_new_pinch_needs_an_open_hand_first(self):
+        pinch = PinchHold()
+        self.assertEqual(self.feed(pinch, 0.01, 0.0, 1.5), 1)
+        self.assertEqual(self.feed(pinch, 0.03, 2.0, 1.5), 0)  # half open: still the same pinch
+        self.assertEqual(self.feed(pinch, 0.08, 4.0, 0.2), 0)
+        self.assertEqual(self.feed(pinch, 0.01, 5.0, 1.5), 1)
+
+    def test_short_open_or_lost_hands_do_not_fire(self):
+        pinch = PinchHold()
+        self.assertEqual(self.feed(pinch, 0.01, 0.0, 0.5), 0)  # a short pinch
+        self.assertEqual(self.feed(pinch, 0.08, 1.0, 0.1), 0)
+        self.assertEqual(self.feed(pinch, 0.03, 2.0, 3.0), 0)  # never closed
+        self.assertEqual(self.feed(pinch, 0.01, 6.0, 3.0, tracked=False), 0)
+        self.assertFalse(pinch.update(None, 10.0))
+
+    def test_a_pinch_does_not_continue_over_a_silent_stream(self):
+        pinch = PinchHold()
+        self.assertEqual(self.feed(pinch, 0.01, 0.0, 0.5), 0)
+        self.assertEqual(self.feed(pinch, 0.01, 30.0, 0.5), 0)  # 0.5 s again, not 30 s
+        self.assertEqual(self.feed(pinch, 0.01, 30.52, 0.6), 1)
 
 
 class TeleopTest(unittest.TestCase):

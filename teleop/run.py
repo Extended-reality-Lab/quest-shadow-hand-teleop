@@ -10,7 +10,8 @@ pc_receiver/receiver.py), turns the hand into robot joint targets
 
 Options: --hand left|right (default right), --port 9000,
 --unity-port 9001 (simulation state for the Unity viewer; 0 = off), --unity-host 127.0.0.1.
-Keys in the viewer: Enter = re-centre (hold your hand forward over the table).
+Re-centre (hold the hand forward, where it is comfortable): Enter in the viewer,
+or pinch thumb and index finger of the other hand for one second.
 
 Only one program can listen on a port: stop receiver.py before running this.
 """
@@ -50,6 +51,11 @@ MAX_FRAME_GAP = 1 / 30  # s; after a long gap the speed limits still count one f
 MAX_CATCH_UP = 0.05  # s of simulation per drawn frame at most
 TIMEOUT = 0.5  # s without packets -> the hand holds still
 KEY_ENTER = 257  # GLFW key code
+# The other hand asks for a re-centre: thumb tip on index tip, held.
+THUMB_TIP, INDEX_TIP = 5, 10  # OpenXR joint indices
+PINCH_CLOSE = 0.02  # m between the tips: pinched
+PINCH_OPEN = 0.04  # m: released
+PINCH_HOLD = 1.0  # s
 
 # Quest (OpenXR: +Y up, -Z forward) -> MuJoCo world (+Z up). Same mapping as in
 # PROTOCOL.md: (x, y, z)_mujoco = (x, -z, y)_openxr.
@@ -119,6 +125,41 @@ def limit_rotation(current, target, max_angle):
     half, f = angle / 2, max_angle / angle
     q = (np.sin((1 - f) * half) * current + np.sin(f * half) * target) / np.sin(half)
     return q / np.linalg.norm(q)
+
+
+class PinchHold:
+    """Says True once when a hand has pinched for PINCH_HOLD seconds.
+
+    The hand must open again before the next one counts, so one long pinch is
+    one request. A hand that is not tracked, or silent, never counts.
+    """
+
+    def __init__(self):
+        self.since = None  # start of the current pinch
+        self.last = None  # time of the last message
+        self.fired = False
+
+    def update(self, msg, now):
+        if msg is None:
+            return False
+        if self.last is not None and now - self.last > TIMEOUT:
+            self.since, self.fired = None, False  # the stream stopped: start again
+        self.last = now
+        gap = None
+        if msg["tracked"]:
+            joints = np.array(msg["joints"], dtype=float)[:, :3]
+            gap = np.linalg.norm(joints[THUMB_TIP] - joints[INDEX_TIP])
+        if gap is None or gap > PINCH_OPEN:
+            self.since, self.fired = None, False
+            return False
+        if self.since is None:
+            if gap < PINCH_CLOSE:
+                self.since = now
+            return False
+        if not self.fired and now - self.since >= PINCH_HOLD:
+            self.fired = True
+            return True
+        return False
 
 
 class Teleop:
@@ -251,24 +292,25 @@ def open_socket(port):
     return sock
 
 
-def read_latest(sock, hand):
-    """Drain the socket; return the newest valid message for `hand`, or None."""
-    latest = None
+def read_latest(sock):
+    """Drain the socket. Returns the newest valid message of each hand and the
+    number of valid messages per hand, both as dicts keyed "left" / "right"."""
+    latest, count = {}, {}
     while True:
         try:
             data, _ = sock.recvfrom(protocol.MAX_DATAGRAM_BYTES + 1)
         except BlockingIOError:
-            return latest  # nothing left to read
+            return latest, count  # nothing left to read
         except ConnectionResetError:
             continue  # Windows reports an old ICMP error here; harmless
         except OSError:
-            return latest  # other socket trouble: hold the pose, try next frame
+            return latest, count  # other socket trouble: hold the pose, try next frame
         try:
             msg = protocol.parse(data)
         except protocol.ProtocolError:
             continue
-        if msg["hand"] == hand:
-            latest = msg
+        latest[msg["hand"]] = msg
+        count[msg["hand"]] = count.get(msg["hand"], 0) + 1
 
 
 def main():
@@ -286,7 +328,10 @@ def main():
     teleop = Teleop(model, args.hand)
     place_hand_at_home(model, data, teleop, args.hand)
     sock = open_socket(args.port)
-    print(f"Listening on UDP port {args.port} for the {args.hand} hand. Enter in the viewer = re-centre.")
+    other_hand = "left" if args.hand == "right" else "right"
+    pinch = PinchHold()
+    print(f"Listening on UDP port {args.port} for the {args.hand} hand.")
+    print(f"Re-centre: Enter in the viewer, or pinch the {other_hand} hand for {PINCH_HOLD:.0f} s.")
     print(f"Point the headset at {lan_ip()}:{args.port} (or leave the app on broadcast)")
     publisher = StatePublisher(args.unity_host, args.unity_port) if args.unity_port else None
     if publisher is not None:
@@ -303,10 +348,16 @@ def main():
         viewer.cam.lookat[:] = [0, 0.45, TABLE_TOP]
         viewer.cam.distance, viewer.cam.azimuth, viewer.cam.elevation = 1.1, 90, -30
         start = time.monotonic()
-        last_print = 0.0
+        last_print = start
+        loops = messages = 0  # since the last status line
         while viewer.is_running():
             now = time.monotonic()
-            msg = read_latest(sock, args.hand)
+            latest, count = read_latest(sock)
+            loops += 1
+            messages += count.get(args.hand, 0)
+            if pinch.update(latest.get(other_hand), now):
+                recenter_requested = True
+            msg = latest.get(args.hand)
             if msg is not None and teleop.update(msg, now, recenter=recenter_requested):
                 recenter_requested = False
             teleop.apply(data)
@@ -323,8 +374,12 @@ def main():
                 publisher.publish(model, data, stage=teleop.stage_transform())
 
             if now - last_print > 0.5:
-                last_print = now
-                print(f"\r{teleop.status(now):<45}", end="", flush=True)
+                # Rates show where a delay comes from: hand messages arriving
+                # per second (Unity's frame rate) and loops of this program.
+                window = now - last_print
+                rates = f"hand {messages / window:3.0f}/s  loop {loops / window:3.0f}/s"
+                print(f"\r{teleop.status(now):<34}{rates:<28}", end="", flush=True)
+                last_print, loops, messages = now, 0, 0
             time.sleep(0.005)
     if publisher is not None:
         publisher.close()

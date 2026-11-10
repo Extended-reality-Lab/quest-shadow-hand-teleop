@@ -24,9 +24,12 @@ Windows:
 Options: `--hand left` (default `right`), `--port 9000`.
 
 The first tracked frame sets the starting point: hold your hand forward,
-palm down. Press **Enter** in the viewer to re-centre at any time. The
-terminal shows `TRACKING` with the fit error, or `HOLD` when the hand is not
-tracked (the robot hand then keeps its last pose).
+palm down. To re-centre at any time, press **Enter** in the viewer, or pinch
+thumb and index finger of the other hand for one second (for when the headset
+is on and the keyboard is out of sight). The terminal shows `TRACKING` with
+the fit error, or `HOLD` when the hand is not tracked (the robot hand then
+keeps its last pose), and two rates: `hand` = messages of this hand per
+second, `loop` = turns of the main loop per second.
 
 The network setup is the same as for the receiver (SETUP.md): the PC and the
 headset on one network, or the headset pointed at the PC's address.
@@ -70,16 +73,19 @@ passing through it, and objects are pushed and grasped by physics.
 The Quest gives positions, not angles, and the Shadow Hand has other
 proportions (5 thumb joints, coupled last two finger joints). Instead of
 computing each angle by hand, the solver moves the robot fingers until their
-points match the human points:
+points match targets built from the human hand:
 
 1. **Palm frame.** From four landmarks (wrist, index, middle and little
    knuckles) build three axes: forward (wrist to middle knuckle), side (little
    to index knuckle), back (forward x side). The same function builds the
    frame on the robot from the same landmarks.
-2. **Targets.** Every human point is written in the human palm frame, scaled
-   by the hand-length ratio (robot / human, wrist to middle knuckle), and put
-   in the robot palm frame. 15 points: per finger the middle knuckle, the last
-   knuckle and the tip.
+2. **Targets.** Per finger, the direction of each human bone is written in
+   the human palm frame and put in the robot palm frame. The robot's own bones
+   are laid along these directions, starting at the robot's own knuckle. 15
+   points: per finger the ends of its three bones. The robot's bone lengths
+   are used, not the human's: the Shadow Hand has longer fingers for its palm
+   than a person, and with scaled human positions as targets a straight human
+   finger gave a bent robot finger.
 3. **Damped least squares.** For each point `mj_jacSite` / `mj_jacBody` gives
    how the point moves per joint. The update
    `dq = J^T (J J^T + lambda^2 I)^-1 e` reduces the weighted error `e`; joints
@@ -117,7 +123,8 @@ still press into the table, and contact stops them there.
 
 ### 5. Main loop (`main`)
 
-Each turn: read the newest datagram for the chosen hand, update the targets,
+Each turn: read the newest datagram of each hand (the other hand only for the
+re-centre pinch, `PinchHold`), update the targets for the chosen hand,
 write them into `data`, step the physics until simulated time catches up with
 the wall clock (timestep 2 ms, at most 50 ms of catch-up per frame), sync the
 viewer. At start it prints the PC address to give the headset, like the
@@ -128,7 +135,9 @@ receiver.
 | Test | Check |
 |---|---|
 | `test_finds_a_robot_pose_again` | a skeleton taken from the robot itself in a random pose, then rotated, scaled 1.3x and moved, is matched within 4 mm mean point error (both hands) |
+| `test_short_straight_fingers_stay_straight` | the open robot skeleton with every finger shortened to 60 %: no joint bends more than 0.05 rad |
 | `test_fist_bends_the_fingers_more_than_open_hand` | fake hand closed vs open: index and middle flexion targets differ by more than 1 rad |
+| `PinchHoldTest` (4 tests) | a pinch held for 1 s asks for one re-centre; the hand must open before the next; a short pinch, a half-open hand, an untracked hand and a pinch across a silent stream do not count |
 | `test_hand_follows_the_target_and_stays_in_limits` | 3 s of the fake hand: no NaN, every ctrl in range, forearm within 2 cm of the target |
 | `test_tracking_loss_holds_the_last_pose` | untracked messages leave the targets unchanged |
 | `test_hand_target_stays_in_the_workspace` | a hand 5 m below the floor keeps the target above the table |
@@ -142,6 +151,8 @@ receiver.
   hand and the robot's own skeleton.
 - The thumb has 5 joints on the robot and 4 points on the human: the solver
   picks one of several thumb poses that fit.
+- Fingertip positions between the fingers are not kept: when the human thumb
+  and index tips touch, the robot's tips can be a little apart or overlap.
 - One hand at a time.
 - Grasping depends on contact parameters (friction 1.2 on the objects); heavy
   or slippery objects need tuning.

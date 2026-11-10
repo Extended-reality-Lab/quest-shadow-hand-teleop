@@ -60,7 +60,12 @@ Save the project to GitHub afterwards (`docs/integration/LAB-PC.md`).
 4. Hold the hand in front of you. The first tracked frame re-centres: the
    simulated wrist goes to its home position above the near edge of the table,
    and the scene moves so that this position is where your real wrist is. To
-   re-centre again, press Enter in the MuJoCo viewer window.
+   re-centre again, pinch thumb and index finger of the left hand for one
+   second, or press Enter in the MuJoCo viewer window. Re-centre with the
+   right hand where it is comfortable and with free space in front of it: the
+   table starts at the wrist and reaches 60 cm forward and 20 cm down, so a
+   real desk there is in the way. The direction the fingers point becomes the
+   direction of the table.
 
 The two status boxes in Unity say what works: `MuJoCo: seq N` (state stream
 arriving) and `hands -> 127.0.0.1:9000  left LOST  right TRACKED`.

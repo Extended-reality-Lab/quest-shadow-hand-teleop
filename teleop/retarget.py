@@ -6,9 +6,11 @@ inverse kinematics on a copy of the Shadow Hand:
 
 1. Build a palm frame (forward, side, back-of-hand) from four landmarks on the
    human hand, and the same frame from the same four landmarks on the robot.
-2. Express the human finger joints in the human palm frame, scale them to the
-   robot's hand size, and place them in the robot's palm frame. These are the
-   targets: knuckle, last joint and fingertip of every finger.
+2. Take the direction of every human finger bone in the human palm frame. Lay
+   the robot's own bones along these directions, starting at the robot's own
+   knuckle. The ends of the bones are the targets: three per finger. The
+   robot's bone lengths are used, not the human's, so a straight human finger
+   gives a straight robot finger whatever the proportions of the two hands.
 3. Damped least squares moves the robot's finger joints until its own points
    reach the targets. The result is one target per actuator (data.ctrl).
 
@@ -29,33 +31,21 @@ INDEX_PROXIMAL = 7
 MIDDLE_PROXIMAL = 12
 LITTLE_PROXIMAL = 22
 
-# Each pair: (OpenXR joint index, Shadow Hand point). A Shadow point is a body
+# One chain per finger: the OpenXR joints from the base of the finger to its
+# tip, and the Shadow Hand points at the same places. A Shadow point is a body
 # origin (the joint at the base of that bone) or one of the tip sites added in
-# build_hand_spec(). Weight: how hard the solver tries to match it.
-# Human knuckle names: proximal = base of the finger, intermediate = middle
-# knuckle, distal = last knuckle.
-TARGETS = [
-    # thumb: OpenXR has metacarpal, proximal, distal, tip
-    (3, "thmiddle", 0.5),
-    (4, "thdistal", 0.7),
-    (5, "th_tip", 1.0),
-    # index (Shadow "first finger", ff)
-    (8, "ffmiddle", 0.5),
-    (9, "ffdistal", 0.7),
-    (10, "ff_tip", 1.0),
-    # middle (mf)
-    (13, "mfmiddle", 0.5),
-    (14, "mfdistal", 0.7),
-    (15, "mf_tip", 1.0),
-    # ring (rf)
-    (18, "rfmiddle", 0.5),
-    (19, "rfdistal", 0.7),
-    (20, "rf_tip", 1.0),
-    # little (lf)
-    (23, "lfmiddle", 0.5),
-    (24, "lfdistal", 0.7),
-    (25, "lf_tip", 1.0),
+# build_hand_spec(). OpenXR names: thumb = metacarpal, proximal, distal, tip;
+# fingers = proximal (the knuckle), intermediate, distal, tip.
+CHAINS = [
+    ((2, 3, 4, 5), ("thproximal", "thmiddle", "thdistal", "th_tip")),
+    ((7, 8, 9, 10), ("ffproximal", "ffmiddle", "ffdistal", "ff_tip")),  # index
+    ((12, 13, 14, 15), ("mfproximal", "mfmiddle", "mfdistal", "mf_tip")),  # middle
+    ((17, 18, 19, 20), ("rfproximal", "rfmiddle", "rfdistal", "rf_tip")),  # ring
+    ((22, 23, 24, 25), ("lfproximal", "lfmiddle", "lfdistal", "lf_tip")),  # little
 ]
+# How hard the solver tries to match the end of the first bone, of the second
+# bone, and the fingertip.
+WEIGHTS = (0.5, 0.7, 1.0)
 
 # Fingertip sites: (site name, distal body, length of the last bone in m).
 TIPS = [
@@ -119,22 +109,30 @@ class Retargeter:
         palm_rot = self.data.body(p + "palm").xmat.reshape(3, 3).copy()
 
         def local(name):
+            if name.endswith("_tip"):
+                return palm_rot.T @ (self.data.site(p + name).xpos - palm_pos)
             return palm_rot.T @ (self.data.body(p + name).xpos - palm_pos)
 
         self.robot_frame = palm_frame(
             np.zeros(3), local("ffproximal"), local("mfproximal"), local("lfproximal")
         )
-        self.robot_hand_length = np.linalg.norm(local("mfproximal"))
 
+        # Per finger, from the open hand the model starts in: where the chain
+        # begins in the palm, and the length of each bone.
+        self.chains = []
         # Solver points: body origins or tip sites, and the dofs it may move
         # (every finger joint; the two wrist joints stay at 0 because run.py
         # moves the whole hand instead).
         self.points = []
-        for _, name, weight in TARGETS:
-            if name.endswith("_tip"):
-                self.points.append(("site", self.model.site(p + name).id, weight))
-            else:
-                self.points.append(("body", self.model.body(p + name).id, weight))
+        for human, robot in CHAINS:
+            places = [local(name) for name in robot]
+            lengths = np.linalg.norm(np.diff(places, axis=0), axis=1)
+            self.chains.append((human, places[0], lengths))
+            for name, weight in zip(robot[1:], WEIGHTS):
+                if name.endswith("_tip"):
+                    self.points.append(("site", self.model.site(p + name).id, weight))
+                else:
+                    self.points.append(("body", self.model.body(p + name).id, weight))
         wrist_dofs = {self.model.joint(p + j).dofadr[0] for j in ("WRJ1", "WRJ2")}
         self.dofs = np.array([i for i in range(self.model.nv) if i not in wrist_dofs])
         self.lower = self.model.jnt_range[:, 0]
@@ -148,17 +146,20 @@ class Retargeter:
 
     def targets(self, joints):
         """Target positions for the solver points, in the solver's world."""
-        human_frame = self.human_frame(joints)
-        human_length = np.linalg.norm(joints[MIDDLE_PROXIMAL] - joints[WRIST])
-        scale = np.clip(self.robot_hand_length / human_length, 0.6, 1.8)
         # human Quest coordinates -> human palm axes -> robot palm axes
-        to_robot = self.robot_frame @ human_frame.T
+        to_robot = self.robot_frame @ self.human_frame(joints).T
         palm_pos = self.data.xpos[self.palm_id]
         palm_rot = self.data.xmat[self.palm_id].reshape(3, 3)
         out = []
-        for index, _, _ in TARGETS:
-            in_palm = scale * (to_robot @ (joints[index] - joints[WRIST]))
-            out.append(palm_pos + palm_rot @ in_palm)
+        for human, start, lengths in self.chains:
+            point = start
+            for a, b, length in zip(human, human[1:], lengths):
+                bone = joints[b] - joints[a]
+                size = np.linalg.norm(bone)
+                if size < 1e-4:
+                    raise ValueError("two joints of one finger coincide")
+                point = point + length * (to_robot @ bone) / size
+                out.append(palm_pos + palm_rot @ point)
         return np.array(out)
 
     def solve(self, joints):

@@ -106,7 +106,7 @@ Drive the hand in MuJoCo (stop `receiver.py` first):
 .\.venv\Scripts\python.exe teleop\run.py      # Windows
 ```
 
-Hold your right hand forward, palm down; press Enter in the viewer to re-centre. `--hand left` for the left hand.
+Hold your right hand forward, palm down; to re-centre, press Enter in the viewer or pinch the other hand for one second. `--hand left` for the left hand.
 
 Without a headset, the fake sender plays a hand that opens and closes:
 
