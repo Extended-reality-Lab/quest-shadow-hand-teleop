@@ -8,6 +8,9 @@ scene:
     v, seq, sim_time, send_time,
     bodies[]  {id, p, q}         every hand body and the mocap target
     objects[] {id, p, q, grasp}  ball, cube, can; grasp is "free" until #26
+    stage     {p, q}             pose of the headset's tracking origin, once the
+                                 teleop has re-centred (frames.stage_to_unity);
+                                 Unity puts its XR rig there
 
 p is a position in metres, q a quaternion (x, y, z, w), both in Unity's world
 frame. Unity applies them as they are.
@@ -18,7 +21,7 @@ import socket
 import time
 
 import numpy as np
-from frames import to_unity_quat, to_unity_vec
+from frames import stage_to_unity, to_unity_quat, to_unity_vec
 
 VERSION = 1
 OBJECTS = ("ball", "cube", "can")
@@ -34,8 +37,12 @@ def _flat(values):
     return [float(v) for v in np.round(values, DECIMALS)]
 
 
-def build_state(model, data, seq, send_time=None):
-    """The state message for the current simulation data (after mj_step or mj_forward)."""
+def build_state(model, data, seq, send_time=None, stage=None):
+    """The state message for the current simulation data (after mj_step or mj_forward).
+
+    `stage` is (rotation, translation) from the OpenXR stage frame into the
+    MuJoCo world (Teleop.stage_transform), or None before the first re-centre.
+    """
     bodies, objects = [], []
     for body in range(1, model.nbody):  # body 0 is the world
         name = model.body(body).name
@@ -49,7 +56,7 @@ def build_state(model, data, seq, send_time=None):
             objects.append(pose)
         else:
             bodies.append(pose)
-    return {
+    state = {
         "v": VERSION,
         "seq": int(seq),
         "sim_time": round(float(data.time), 6),
@@ -57,6 +64,10 @@ def build_state(model, data, seq, send_time=None):
         "bodies": bodies,
         "objects": objects,
     }
+    if stage is not None:
+        position, quat = stage_to_unity(*stage)
+        state["stage"] = {"p": _flat(position), "q": _flat(quat)}
+    return state
 
 
 def encode(state):
@@ -76,7 +87,7 @@ class StatePublisher:
         self.seq = 0
         self.next_time = None
 
-    def publish(self, model, data):
+    def publish(self, model, data, stage=None):
         """Send one message if one is due. Returns True if a datagram went out."""
         now = self.clock()
         if self.next_time is not None and now < self.next_time:
@@ -86,7 +97,7 @@ class StatePublisher:
             self.next_time = now
         self.next_time += self.period
         try:
-            self.sock.sendto(encode(build_state(model, data, self.seq)), self.address)
+            self.sock.sendto(encode(build_state(model, data, self.seq, stage=stage)), self.address)
         except OSError:
             return False  # network trouble: Unity misses one state, the next one follows
         self.seq += 1

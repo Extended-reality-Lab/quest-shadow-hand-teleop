@@ -20,6 +20,7 @@ import fake_sender  # pyright: ignore[reportMissingImports]
 import protocol  # pyright: ignore[reportMissingImports]
 from frames import to_mujoco_vec
 from run import (  # pyright: ignore[reportMissingImports]
+    HOME,
     Teleop,
     build_scene,
     place_hand_at_home,
@@ -70,6 +71,29 @@ class StateMessageTest(unittest.TestCase):
         print(f"\nstate message: {size} bytes")
         self.assertLess(size, 60000)
         self.assertNotIn(b"e-", encode(self.state))
+
+    def test_stage_only_after_recentre(self):
+        self.assertNotIn("stage", self.state)
+        teleop = Teleop(self.model, HAND)
+        self.assertIsNone(teleop.stage_transform())
+        state = build_state(self.model, self.data, 8, stage=teleop.stage_transform())
+        self.assertNotIn("stage", state)
+
+    def test_stage_puts_the_tracked_wrist_on_the_streamed_palm_target(self):
+        """After a re-centre, the stage pose maps the headset's wrist position to
+        the palm position the teleop asked for: the rendered hand is on the real hand."""
+        teleop = Teleop(self.model, HAND)
+        joints = fake_sender.synthetic_hand(HAND, 0.4)
+        msg = protocol.parse(protocol.encode(protocol.make_message(1, 0, HAND, True, "optical", joints)))
+        self.assertTrue(teleop.update(msg, 0.0))
+        state = build_state(self.model, self.data, 9, stage=teleop.stage_transform())
+        rotation, translation = teleop.stage_transform()
+        wrist = np.array(msg["joints"][protocol.WRIST][:3])  # as parsed: rounded to 0.1 mm on the wire
+        np.testing.assert_allclose(rotation @ wrist + translation, HOME, atol=1e-9)
+        stage = state["stage"]
+        self.assertEqual((len(stage["p"]), len(stage["q"])), (3, 4))
+        np.testing.assert_allclose(to_mujoco_vec(stage["p"]), translation, atol=1e-4)
+        self.assertAlmostEqual(float(np.linalg.norm(stage["q"])), 1.0, places=4)
 
 
 class PublisherTest(unittest.TestCase):

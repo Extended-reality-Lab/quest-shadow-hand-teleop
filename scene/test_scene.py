@@ -7,6 +7,7 @@ import os
 import sys
 import unittest
 
+import mujoco  # pyright: ignore[reportMissingImports]
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -19,7 +20,14 @@ from export_manifest import (
     initial_state,
     to_json,
 )
-from frames import to_mujoco_quat, to_mujoco_vec, to_unity_quat, to_unity_vec
+from frames import (
+    mat_to_quat_xyzw,
+    stage_to_unity,
+    to_mujoco_quat,
+    to_mujoco_vec,
+    to_unity_quat,
+    to_unity_vec,
+)
 
 
 def rotate(q, v):
@@ -52,6 +60,43 @@ class FramesTest(unittest.TestCase):
         q = np.array([0.5, 0.5, -0.5, 0.5])
         np.testing.assert_allclose(to_mujoco_quat(to_unity_quat(q)), q)
         np.testing.assert_allclose(to_mujoco_vec(to_unity_vec([1.0, 2.0, 3.0])), [1.0, 2.0, 3.0])
+
+    def test_matrix_to_quaternion_matches_mujoco(self):
+        rng = np.random.default_rng(3)
+        for _ in range(200):
+            q = rng.normal(size=4)
+            q /= np.linalg.norm(q)
+            m = np.zeros(9)
+            mujoco.mju_quat2Mat(m, q)
+            got = mat_to_quat_xyzw(m.reshape(3, 3))
+            expected = q if q[0] >= 0 else -q
+            np.testing.assert_allclose(unity_to_wxyz(got), expected, atol=1e-9)
+
+    def test_stage_rig_puts_the_stage_point_where_the_world_point_is(self):
+        """The rig pose in Unity maps a left-handed stage point to the Unity
+        position of the world point that the same (rotation, translation) gives."""
+        rng = np.random.default_rng(11)
+        for _ in range(200):
+            axis_angle = rng.normal(size=3)
+            rotation = np.zeros(9)
+            quat = np.zeros(4)
+            mujoco.mju_axisAngle2Quat(quat, axis_angle / np.linalg.norm(axis_angle), rng.uniform(-np.pi, np.pi))
+            mujoco.mju_quat2Mat(rotation, quat)
+            rotation = rotation.reshape(3, 3)
+            translation = rng.normal(size=3)
+            point = rng.normal(size=3)  # OpenXR stage frame, right-handed
+            expected = to_unity_vec(rotation @ point + translation)
+
+            position, rig_quat = stage_to_unity(rotation, translation)
+            unity_point = point * [1.0, 1.0, -1.0]  # the same point as Unity's OpenXR plugin reports it
+            got = rotate(unity_to_wxyz(rig_quat), unity_point) + position
+            np.testing.assert_allclose(got, expected, atol=1e-9)
+
+    def test_stage_without_yaw_is_a_plain_offset(self):
+        quest_to_world = np.array([[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]])
+        position, quat = stage_to_unity(quest_to_world, [0.0, 0.25, 0.95])
+        np.testing.assert_allclose(position, [0.0, 0.95, 0.25])
+        np.testing.assert_allclose(quat, [0.0, 0.0, 0.0, 1.0])
 
 
 class ManifestTest(unittest.TestCase):

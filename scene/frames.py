@@ -44,3 +44,47 @@ def to_mujoco_quat(q):
 def to_unity_triangles(triangles):
     """Triangle indices (n, 3) -> the same triangles with the winding reversed."""
     return np.asarray(triangles)[:, [0, 2, 1]]
+
+
+# Swap Y and Z (MuJoCo <-> Unity) and negate Z (OpenXR <-> Unity). Both are
+# reflections and each is its own inverse.
+_MUJOCO_TO_UNITY = np.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, 1.0, 0.0]])
+_OPENXR_TO_UNITY = np.diag([1.0, 1.0, -1.0])
+
+
+def stage_to_unity(rotation, translation):
+    """Pose of the headset's tracking origin, for the XR rig in Unity.
+
+    `rotation` (3x3) and `translation` (3) map a point of the OpenXR stage frame
+    (+Y up, -Z forward, right-handed) into the MuJoCo world:
+    world = rotation @ p + translation. This is the mapping teleop/run.py applies
+    to the tracked wrist. Unity's OpenXR plugin reports the same stage with Z
+    negated (left-handed). The returned Unity position and quaternion (x, y, z, w)
+    are the pose of a rig such that rig.TransformPoint(unity_stage_point) is the
+    Unity position of the same point of the world: the rendered hand then sits on
+    the real hand.
+    """
+    rotation = np.asarray(rotation, dtype=float)
+    rig = _MUJOCO_TO_UNITY @ rotation @ _OPENXR_TO_UNITY  # two reflections: a rotation
+    return to_unity_vec(translation), mat_to_quat_xyzw(rig)
+
+
+def mat_to_quat_xyzw(m):
+    """Unit quaternion (x, y, z, w) of a rotation matrix (3x3), with w >= 0."""
+    m = np.asarray(m, dtype=float)
+    trace = m[0, 0] + m[1, 1] + m[2, 2]
+    if trace > 0.0:
+        s = 2.0 * np.sqrt(trace + 1.0)
+        q = np.array([(m[2, 1] - m[1, 2]) / s, (m[0, 2] - m[2, 0]) / s, (m[1, 0] - m[0, 1]) / s, 0.25 * s])
+    elif m[0, 0] >= m[1, 1] and m[0, 0] >= m[2, 2]:
+        s = 2.0 * np.sqrt(1.0 + m[0, 0] - m[1, 1] - m[2, 2])
+        q = np.array([0.25 * s, (m[0, 1] + m[1, 0]) / s, (m[0, 2] + m[2, 0]) / s, (m[2, 1] - m[1, 2]) / s])
+    elif m[1, 1] >= m[2, 2]:
+        s = 2.0 * np.sqrt(1.0 + m[1, 1] - m[0, 0] - m[2, 2])
+        q = np.array([(m[0, 1] + m[1, 0]) / s, 0.25 * s, (m[1, 2] + m[2, 1]) / s, (m[0, 2] - m[2, 0]) / s])
+    else:
+        s = 2.0 * np.sqrt(1.0 + m[2, 2] - m[0, 0] - m[1, 1])
+        q = np.array([(m[0, 2] + m[2, 0]) / s, (m[1, 2] + m[2, 1]) / s, 0.25 * s, (m[1, 0] - m[0, 1]) / s])
+    if q[3] < 0.0:
+        q = -q
+    return q / np.linalg.norm(q)

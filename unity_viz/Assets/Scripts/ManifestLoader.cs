@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.XR;
 
 // Builds the MuJoCo scene from scene/scene_manifest.json (written by
 // scene/export_manifest.py). Visual only: no Rigidbody, no Collider.
@@ -11,7 +12,7 @@ public class ManifestLoader : MonoBehaviour
     [Tooltip("Path to scene_manifest.json. Empty = <repo>/scene/scene_manifest.json")]
     public string manifestPath = "";
 
-    [Tooltip("Move Camera.main to the first view of the MuJoCo viewer.")]
+    [Tooltip("Move Camera.main to the first view of the MuJoCo viewer. Skipped when a headset drives the camera.")]
     public bool setCamera = true;
 
     void Start()
@@ -62,7 +63,8 @@ public class ManifestLoader : MonoBehaviour
             }
         }
 
-        if (setCamera)
+        // With a headset the camera follows the head; the XR rig places it (StateReceiver.xrRig).
+        if (setCamera && !XRSettings.isDeviceActive)
         {
             SetCamera(manifest.camera);
         }

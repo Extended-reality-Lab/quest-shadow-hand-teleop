@@ -157,6 +157,14 @@ class Teleop:
         c, s = np.cos(heading), np.sin(heading)
         self.yaw = np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
 
+    def stage_transform(self):
+        """Rotation and translation that map the headset's stage frame into the
+        world, as update() applies them to the wrist; None before the first re-centre."""
+        if self.origin is None:
+            return None
+        rotation = self.yaw @ QUEST_TO_WORLD
+        return rotation, HOME - rotation @ self.origin
+
     def forearm_pose(self, palm_rot, palm_pos):
         """Forearm (mocap) position and quaternion that put the palm at this pose."""
         rot = palm_rot @ self.palm_in_forearm_rot.T
@@ -309,7 +317,7 @@ def main():
                 mujoco.mj_step(model, data)
             viewer.sync()
             if publisher is not None:
-                publisher.publish(model, data)
+                publisher.publish(model, data, stage=teleop.stage_transform())
 
             if now - last_print > 0.5:
                 last_print = now

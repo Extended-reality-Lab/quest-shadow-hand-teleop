@@ -15,6 +15,9 @@ public class StateReceiver : MonoBehaviour
     [Tooltip("UDP port of the MuJoCo state stream (teleop/run.py --unity-port).")]
     public int port = 9001;
 
+    [Tooltip("Parent of the XR camera. Moved to the headset's tracking origin (the 'stage' pose), so the rendered hand is on the real hand. Leave empty without a headset.")]
+    public Transform xrRig;
+
     readonly object stateLock = new object();
     byte[] latest;      // newest datagram, written by the receive thread, under stateLock
     int receivedCount;  // under stateLock
@@ -126,6 +129,12 @@ public class StateReceiver : MonoBehaviour
         shownSeq = state.seq;
         Apply(state.bodies);
         Apply(state.objects);
+        if (xrRig != null)
+        {
+            // Absent until the teleop has re-centred; then the headset's
+            // tracking origin, in the same world frame as the bodies.
+            SetPose(xrRig, state.stage);
+        }
     }
 
     void Apply(MujocoPose[] poses)
@@ -136,18 +145,22 @@ public class StateReceiver : MonoBehaviour
         }
         foreach (MujocoPose pose in poses)
         {
-            if (pose == null || pose.p == null || pose.p.Length != 3 || pose.q == null || pose.q.Length != 4)
+            if (pose != null)
             {
-                continue;
+                SetPose(FindPart(pose.id), pose);
             }
-            Transform part = FindPart(pose.id);
-            if (part == null)
-            {
-                continue;
-            }
-            part.localPosition = new Vector3(pose.p[0], pose.p[1], pose.p[2]);
-            part.localRotation = new Quaternion(pose.q[0], pose.q[1], pose.q[2], pose.q[3]);
         }
+    }
+
+    // Applies p and q as the local pose, when both are complete and the target exists.
+    static void SetPose(Transform target, MujocoPose pose)
+    {
+        if (target == null || pose == null || pose.p == null || pose.p.Length != 3 || pose.q == null || pose.q.Length != 4)
+        {
+            return;
+        }
+        target.localPosition = new Vector3(pose.p[0], pose.p[1], pose.p[2]);
+        target.localRotation = new Quaternion(pose.q[0], pose.q[1], pose.q[2], pose.q[3]);
     }
 
     // The child that ManifestLoader built for this body id; looked up again
@@ -189,6 +202,7 @@ public class MujocoState
     public double send_time;
     public MujocoPose[] bodies;
     public MujocoPose[] objects;
+    public MujocoPose stage;  // headset tracking origin; p empty until the teleop has re-centred
 }
 
 [Serializable]

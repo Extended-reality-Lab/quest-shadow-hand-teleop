@@ -76,6 +76,12 @@ lost, the hand holds still in both windows. Stop with Ctrl+C in each terminal.
 If Unity shows a compile error in `StateReceiver.cs`, delete that file and the
 static scene works as before.
 
+## Headset: the scene in VR over a Link cable
+
+Unity renders into the Quest and sends the tracked hands to MuJoCo itself; the
+simulated hand appears on the real hand. Setup and the daily steps:
+[docs/integration/HEADSET.md](../docs/integration/HEADSET.md).
+
 ## After a scene change
 
 ```
