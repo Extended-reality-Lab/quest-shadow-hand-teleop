@@ -301,7 +301,7 @@ def main():
 
     with mujoco.viewer.launch_passive(model, data, key_callback=on_key) as viewer:
         viewer.cam.lookat[:] = [0, 0.45, TABLE_TOP]
-        viewer.cam.distance, viewer.cam.azimuth, viewer.cam.elevation = 1.1, -90, -30
+        viewer.cam.distance, viewer.cam.azimuth, viewer.cam.elevation = 1.1, 90, -30
         start = time.monotonic()
         last_print = 0.0
         while viewer.is_running():

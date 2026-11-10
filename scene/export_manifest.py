@@ -39,9 +39,10 @@ SEGMENTS = 24  # around round primitives
 RINGS = 12  # pole to pole on spheres and capsules
 PLANE_HALF_SIZE = 5.0  # m, for planes MuJoCo draws as infinite (size 0)
 DEFAULT_RGBA = (0.5, 0.5, 0.5, 1.0)  # MuJoCo's geom colour when none is given
-# The first view of the viewer in teleop/run.py main(), so screenshots match.
+# The first view of the viewer in teleop/run.py main(), so screenshots match:
+# from behind the hand, on the operator's side of the table.
 CAMERA_LOOKAT = (0.0, 0.45, TABLE_TOP)
-CAMERA_DISTANCE, CAMERA_AZIMUTH, CAMERA_ELEVATION = 1.1, -90.0, -30.0  # m, deg, deg
+CAMERA_DISTANCE, CAMERA_AZIMUTH, CAMERA_ELEVATION = 1.1, 90.0, -30.0  # m, deg, deg
 
 
 def initial_state(model):
